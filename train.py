@@ -15,7 +15,7 @@ IMG_DIR = "data_folder/cropped_images"
 MASK_DIR = "data_folder/cropped_masks"
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 BATCH_SIZE = 8
-LR = 1e-4
+LR = 1e-4 # learning rate
 EPOCHS = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -66,16 +66,17 @@ class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=1, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
         self.alpha = alpha # weight that balances classes. if one class occurs less often, we can increase it.
-        self.gamma = gamma # focus parameter. higher means model will more often ignore easy examples.
-        self.reduction = reduction # mean/sum/tensor
+        self.gamma = gamma # focus parameter. higher means model will more often lower loss value on easy eg.
+        self.reduction = reduction # mean/sum
 
     def forward(self, inputs, targets):
         # calculating standard cross entropy for each element
         ce_loss = torch.nn.functional.cross_entropy(inputs, targets, reduction='none')
 
-        # cross_entropy = -log(pt) -> pt = e^(cross_entropy)
+        # cross_entropy = -log(pt) -> pt = e^(cross_entropy). | close to 0 = hard eg, close to 1 = easy eg. 
         pt = torch.exp(-ce_loss)
 
+        # FL(pt) = -alpha(1-pt)^(gamma)*log(pt)
         focal_loss = self.alpha * (1 - pt)**self.gamma * ce_loss
         
         if self.reduction == 'mean':
@@ -86,21 +87,33 @@ class FocalLoss(torch.nn.Module):
             return focal_loss
 
 def dice_loss(pred, target, num_classes=4):
+    # normalize predictions
     pred = torch.softmax(pred, dim=1)
+    # labels -> binary masks for each class ([B, C, H, W])
     target_one_hot = torch.nn.functional.one_hot(target, num_classes).permute(0, 3, 1, 2).float()
     
-    dims = (0, 2, 3)
-    intersection = torch.sum(pred * target_one_hot, dims)
+    dims = (0, 2, 3) # batch, height, width
+
+    # common areas
+    intersection = torch.sum(pred * target_one_hot, dims) 
+    # sum of areas
     cardinality = torch.sum(pred + target_one_hot, dims)
     
+    # Dice formula = (2*intersections)/(cardinality) | 1e-6 is added to prevent dividing by 0
     dice = (2. * intersection + 1e-6) / (cardinality + 1e-6)
+
+    # 1 means exelent results, 0 means tragic
     return 1 - dice.mean()
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+# changes LR (learning rate) over time of training 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+# loss function (focused on hard eg)
 focal_criterion = FocalLoss(gamma=2.0)
 
-# train loop
+# ------------------------------------------
+# TRAIN LOOP
+# ------------------------------------------
 start_time = time.time()
 print(f"Starting training for {EPOCHS} epochs...")
 
