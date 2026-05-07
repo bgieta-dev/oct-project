@@ -18,8 +18,6 @@ MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 CHECKPOINT = "best_model.pth"
 USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Suppress warnings from sklearn metrics for classes not present in the mask
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 # Split (same as train.py to get val set)

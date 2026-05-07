@@ -16,7 +16,7 @@ MASK_DIR = "data_folder/cropped_masks"
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 BATCH_SIZE = 8
 LR = 1e-4 # learning rate
-EPOCHS = 2
+EPOCHS = 50
 USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
