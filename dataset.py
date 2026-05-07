@@ -4,17 +4,33 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 class OCTDataset(Dataset):
-    def __init__(self, image_paths, mask_paths, processor, transform=None):
+    def __init__(self, image_paths, mask_paths, processor, transform=None, use_multimodal=False):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.processor = processor
         self.transform = transform
+        self.use_multimodal = use_multimodal
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = np.array(Image.open(self.image_paths[idx]).convert("RGB"))
+        img_path = self.image_paths[idx]
+        
+        if self.use_multimodal:
+            # Load from three different folders
+            denoised_path = img_path.replace("cropped_images", "denoised_images")
+            edge_path = img_path.replace("cropped_images", "edge_map_images")
+            
+            orig = np.array(Image.open(img_path).convert("L"))
+            denoised = np.array(Image.open(denoised_path).convert("L"))
+            edge = np.array(Image.open(edge_path).convert("L"))
+            
+            # Stack into RGB channels
+            image = np.stack([orig, denoised, edge], axis=-1)
+        else:
+            image = np.array(Image.open(img_path).convert("RGB"))
+            
         mask = np.array(Image.open(self.mask_paths[idx]))
         
         if self.transform:

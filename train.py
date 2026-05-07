@@ -17,6 +17,7 @@ MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 BATCH_SIZE = 8
 LR = 1e-4 # learning rate
 EPOCHS = 2
+USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # split data by patient to avoid leakage
@@ -50,8 +51,8 @@ val_transform = A.Compose([
 processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
 processor.do_reduce_labels = False
 
-train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform)
-val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform)
+train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, use_multimodal=USE_MULTIMODAL)
+val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=USE_MULTIMODAL)
 
 train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
 val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE)
@@ -63,7 +64,7 @@ model = SegformerForSemanticSegmentation.from_pretrained(
 ).to(DEVICE)
 
 class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha=1, gamma=2, reduction='mean'):
+    def __init__(self, alpha=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
         self.alpha = alpha # weight that balances classes. if one class occurs less often, we can increase it.
         self.gamma = gamma # focus parameter. higher means model will more often lower loss value on easy eg.
@@ -71,13 +72,13 @@ class FocalLoss(torch.nn.Module):
 
     def forward(self, inputs, targets):
         # calculating standard cross entropy for each element
-        ce_loss = torch.nn.functional.cross_entropy(inputs, targets, reduction='none')
+        ce_loss = torch.nn.functional.cross_entropy(inputs, targets, weight=self.alpha, reduction='none')
 
         # cross_entropy = -log(pt) -> pt = e^(cross_entropy). | close to 0 = hard eg, close to 1 = easy eg. 
         pt = torch.exp(-ce_loss)
 
         # FL(pt) = -alpha(1-pt)^(gamma)*log(pt)
-        focal_loss = self.alpha * (1 - pt)**self.gamma * ce_loss
+        focal_loss = (1 - pt)**self.gamma * ce_loss
         
         if self.reduction == 'mean':
             return focal_loss.mean()
@@ -106,14 +107,16 @@ def dice_loss(pred, target, num_classes=4):
     return 1 - dice.mean()
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+
 # changes LR (learning rate) over time of training 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 # loss function (focused on hard eg)
-focal_criterion = FocalLoss(gamma=2.0)
+focal_criterion = FocalLoss(alpha=torch.tensor([1.0, 2.0, 1.0, 1.0]).to(DEVICE), gamma=2.0)
 
 # ------------------------------------------
 # TRAIN LOOP
 # ------------------------------------------
+best_miou = 0.0
 start_time = time.time()
 print(f"Starting training for {EPOCHS} epochs...")
 
@@ -160,8 +163,32 @@ for epoch in range(EPOCHS):
 
     # val (minimal)
     model.eval()
+    val_ious = []
     with torch.no_grad():
-        pass
+        for batch in tqdm(val_loader, desc="Validating"):
+            pixel_values = batch["pixel_values"].to(DEVICE)
+            labels = batch["labels"].to(DEVICE)
+            
+            outputs = model(pixel_values=pixel_values)
+            logits = torch.nn.functional.interpolate(
+                outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            preds = logits.argmax(dim=1)
+            
+            # calculate IoU per class
+            for c in range(4):
+                intersection = ((preds == c) & (labels == c)).sum().item()
+                union = ((preds == c) | (labels == c)).sum().item()
+                if union > 0:
+                    val_ious.append(intersection / union)
+    
+    curr_miou = np.mean(val_ious) if val_ious else 0
+    print(f"Validation mIoU: {curr_miou:.4f}")
+    
+    if curr_miou > best_miou:
+        best_miou = curr_miou
+        torch.save(model.state_dict(), "best_model.pth")
+        print(f"New best model saved! (mIoU: {best_miou:.4f})")
 
 total_time = time.time() - start_time
 print(f"\nTraining complete in {str(timedelta(seconds=int(total_time)))}")
