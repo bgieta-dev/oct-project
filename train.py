@@ -36,7 +36,7 @@ def get_paths(patient_list):
 train_imgs, train_masks = get_paths(train_patients)
 val_imgs, val_masks = get_paths(val_patients)
 
-# augs
+# augmentation of data
 train_transform = A.Compose([
     A.Resize(512, 512),
     A.HorizontalFlip(p=0.5),
@@ -48,7 +48,7 @@ val_transform = A.Compose([
 ])
 
 processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
-processor.do_reduce_labels = False # masks already 0,1,2,3...
+processor.do_reduce_labels = False
 
 train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform)
 val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform)
@@ -65,13 +65,17 @@ model = SegformerForSemanticSegmentation.from_pretrained(
 class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=1, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
+        self.alpha = alpha # weight that balances classes. if one class occurs less often, we can increase it.
+        self.gamma = gamma # focus parameter. higher means model will more often ignore easy examples.
+        self.reduction = reduction # mean/sum/tensor
 
     def forward(self, inputs, targets):
+        # calculating standard cross entropy for each element
         ce_loss = torch.nn.functional.cross_entropy(inputs, targets, reduction='none')
+
+        # cross_entropy = -log(pt) -> pt = e^(cross_entropy)
         pt = torch.exp(-ce_loss)
+
         focal_loss = self.alpha * (1 - pt)**self.gamma * ce_loss
         
         if self.reduction == 'mean':
@@ -82,7 +86,6 @@ class FocalLoss(torch.nn.Module):
             return focal_loss
 
 def dice_loss(pred, target, num_classes=4):
-    """pred: (N, C, H, W) logits, target: (N, H, W)"""
     pred = torch.softmax(pred, dim=1)
     target_one_hot = torch.nn.functional.one_hot(target, num_classes).permute(0, 3, 1, 2).float()
     
