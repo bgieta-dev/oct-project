@@ -121,6 +121,7 @@ for epoch in range(EPOCHS):
     epoch_start = time.time()
     model.train()
     total_loss = 0
+    # progress bar
     pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
     for batch in pbar:
         optimizer.zero_grad()
@@ -139,12 +140,15 @@ for epoch in range(EPOCHS):
         d_loss = dice_loss(logits, labels)
         loss = 0.5 * f_loss + 0.5 * d_loss
         
+        # backpropagation
         loss.backward()
+        # change in weights 
         optimizer.step()
         
         total_loss += loss.item()
         pbar.set_postfix({"loss": f"{loss.item():.4f}"})
     
+    # changes LR on each epoch
     scheduler.step()
     curr_lr = optimizer.param_groups[0]['lr']
     
