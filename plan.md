@@ -9,15 +9,17 @@
 ## 2. Wybór i Implementacja Architektury
 - [x] Implementacja modelu **SegFormer (B0)** (wykorzystanie transformerów dla globalnych zależności).
 - [ ] Eksperyment z większymi wariantami (np. SegFormer-B2) dla lepszej precyzji.
-- [ ] Konfiguracja multi-channel: dodanie `edge_map_images` jako dodatkowego kanału wejściowego.
+- [x] Konfiguracja multi-channel: dodanie `edge_map_images` i `denoised_images` jako kanałów wejściowych (R: Orig, G: Denoised, B: Edge).
 
 ## 3. Funkcja Straty i Optymalizacja
 - [x] Implementacja **Hybrid Loss**: $Loss = 0.5 \cdot CE + 0.5 \cdot DiceLoss$.
 - [x] Dobór optymalizatora: AdamW z LR 1e-4.
-- [ ] Implementacja **Focal Loss** w celu lepszej walki z przewagą tła (background imbalance).
+- [x] Implementacja **Weighted Focal Loss** w celu walki z przewagą tła i słabym wynikiem Class 1 (Waga 2.0 dla IRF).
+- [x] Optymalizacja prędkości: `num_workers=4`, `pin_memory=True`.
 
 ## 4. Metryki Ewaluacji
 - [x] Implementacja skryptu do obliczania ilościowych metryk.
+- [x] Implementacja walidacji mIoU w pętli treningowej.
 - [x] Baseline Results (SegFormer-B0):
     - mIoU: 0.7260, Mean Dice: 0.8321
     - Class 1 (IRF) IoU: 0.5730 (Priorytet poprawy)
@@ -26,8 +28,9 @@
 - [ ] HD95 (Hausdorff Distance) dla oceny precyzji obrysów.
 
 ## 5. Trenowanie i Walidacja
-- [x] Uruchomienie pierwszej pętli uczenia (10 epok).
-- [ ] Wdrożenie **Focal Loss** lub **Weighted Cross Entropy** aby podbić wyniki Class 1.
+- [x] Uruchomienie pierwszej pętli uczenia (Baseline).
+- [x] Wdrożenie **Focal Loss** z wagami klasowymi.
+- [x] Automatyczne zapisywanie najlepszego modelu (`best_model.pth`).
 - [ ] Wydłużenie treningu do 30-50 epok z Learning Rate Schedulerem.
 
 

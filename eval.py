@@ -15,7 +15,8 @@ from dataset import OCTDataset
 IMG_DIR = "data_folder/cropped_images"
 MASK_DIR = "data_folder/cropped_masks"
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
-CHECKPOINT = "segformer_oct.pth"
+CHECKPOINT = "best_model.pth"
+USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Suppress warnings from sklearn metrics for classes not present in the mask
@@ -36,7 +37,7 @@ model.to(DEVICE).eval()
 
 # transforms
 val_transform = A.Compose([A.Resize(512, 512)])
-ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform)
+ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=USE_MULTIMODAL)
 loader = DataLoader(ds, batch_size=1, shuffle=True)
 
 # Metrics accumulation
@@ -55,7 +56,6 @@ for i, batch in enumerate(tqdm(loader)):
     with torch.no_grad():
         outputs = model(pixel_values=pixel_values)
         logits = outputs.logits
-        # resize logits to match original image size
         upsampled_logits = torch.nn.functional.interpolate(
             logits, size=(512, 512), mode="bilinear", align_corners=False
         )
@@ -64,7 +64,6 @@ for i, batch in enumerate(tqdm(loader)):
     all_preds.append(pred.flatten())
     all_labels.append(labels.flatten())
 
-    # plot only first 3
     if vis_count < 3:
         plt.subplot(3, 3, vis_count*3 + 1)
         plt.imshow(orig_img)
@@ -91,13 +90,11 @@ print("\nCalculating metrics...")
 all_preds = np.concatenate(all_preds)
 all_labels = np.concatenate(all_labels)
 
-# Assuming 4 classes based on train.py
 num_classes = 4 
 ious = []
 dices = []
 
 for c in range(num_classes):
-    # Only calculate if the class is present in the ground truth
     if np.any(all_labels == c):
         iou = jaccard_score(all_labels == c, all_preds == c, zero_division=1.0)
         dice = f1_score(all_labels == c, all_preds == c, zero_division=1.0)

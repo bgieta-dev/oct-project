@@ -61,3 +61,9 @@ Zamiast MAE. Mierzy największą odległość między konturem predykcji a kontu
 
 
 Zastosowanie Focal Loss w miejsce standardowej Cross-Entropy umożliwia skuteczną detekcję mikro-zmian (HRF), które często są pomijane ze względu na dużą dysproporcję między tłem a obiektem. Z kolei wprowadzenie metryki HD95 pozwala na precyzyjną ocenę morfologii zmian (kształt cyst IRF/SRF), co stanowi istotną przewagę nad tradycyjnymi metodami opartymi wyłącznie na pomiarze grubości warstw siatkówki.
+
+# Nowe ulepszenia
+- **Multi-Modality**: Wejście 3-kanałowe (R: Oryginał, G: Denoised, B: Edge Map) dla lepszej ekstrakcji cech.
+- **Weighted Focal Loss**: Wagi `[1, 2, 1, 1]` dla wzmocnienia detekcji klasy IRF (Class 1).
+- **Optymalizacja**: Wykorzystanie `num_workers` i `pin_memory` dla przyspieszenia ładowania danych na GPU (np. RX 7900 XT).
+- **Validation Loop**: Pełna walidacja mIoU w trakcie treningu i zapisywanie najlepszego modelu (`best_model.pth`).

@@ -54,8 +54,8 @@ processor.do_reduce_labels = False
 train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, use_multimodal=USE_MULTIMODAL)
 val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=USE_MULTIMODAL)
 
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE)
+train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=4, pin_memory=True)
 
 model = SegformerForSemanticSegmentation.from_pretrained(
     MODEL_NAME, 
@@ -193,5 +193,4 @@ for epoch in range(EPOCHS):
 total_time = time.time() - start_time
 print(f"\nTraining complete in {str(timedelta(seconds=int(total_time)))}")
 
-# save
 torch.save(model.state_dict(), "segformer_oct.pth")
