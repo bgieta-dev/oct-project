@@ -6,3 +6,4 @@ albumentations
 scikit-learn
 matplotlib
 tqdm
+torchvision
