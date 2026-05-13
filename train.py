@@ -20,6 +20,49 @@ EPOCHS = 50
 USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=None, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha # weight that balances classes. if one class occurs less often, we can increase it.
+        self.gamma = gamma # focus parameter. higher means model will more often lower loss value on easy eg.
+        self.reduction = reduction # mean/sum
+
+    def forward(self, inputs, targets):
+        # calculating standard cross entropy for each element
+        ce_loss = torch.nn.functional.cross_entropy(inputs, targets, weight=self.alpha, reduction='none')
+
+        # cross_entropy = -log(pt) -> pt = e^(cross_entropy). | close to 0 = hard eg, close to 1 = easy eg. 
+        pt = torch.exp(-ce_loss)
+
+        # FL(pt) = -alpha(1-pt)^(gamma)*log(pt)
+        focal_loss = (1 - pt)**self.gamma * ce_loss
+        
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
+
+def dice_loss(pred, target, num_classes=4):
+    # normalize predictions
+    pred = torch.softmax(pred, dim=1)
+    # labels -> binary masks for each class ([B, C, H, W])
+    target_one_hot = torch.nn.functional.one_hot(target, num_classes).permute(0, 3, 1, 2).float()
+    
+    dims = (0, 2, 3) # batch, height, width
+
+    # common areas
+    intersection = torch.sum(pred * target_one_hot, dims) 
+    # sum of areas
+    cardinality = torch.sum(pred + target_one_hot, dims)
+    
+    # Dice formula = (2*intersections)/(cardinality) | 1e-6 is added to prevent dividing by 0
+    dice = (2. * intersection + 1e-6) / (cardinality + 1e-6)
+
+    # 1 means exelent results, 0 means tragic
+    return 1 - dice.mean()
+
 if __name__ == "__main__":
     # split data by patient to avoid leakage
     all_files = sorted(os.listdir(IMG_DIR))
