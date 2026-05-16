@@ -18,7 +18,6 @@ class OCTDataset(Dataset):
         img_path = self.image_paths[idx]
         
         if self.use_multimodal:
-            # Load from three different folders
             denoised_path = img_path.replace("cropped_images", "denoised_images")
             edge_path = img_path.replace("cropped_images", "edge_map_images")
             
@@ -26,7 +25,6 @@ class OCTDataset(Dataset):
             denoised = np.array(Image.open(denoised_path).convert("L"))
             edge = np.array(Image.open(edge_path).convert("L"))
             
-            # Stack into RGB channels
             image = np.stack([orig, denoised, edge], axis=-1)
         else:
             image = np.array(Image.open(img_path).convert("RGB"))
@@ -43,6 +41,9 @@ class OCTDataset(Dataset):
         p1, p99 = np.percentile(image, (1, 99))
         image = np.clip(image, p1, p99)
         image = (image - p1) / (p99 - p1 + 1e-8)
+        
+        # Scale back to 0-255 uint8 so processor works correctly
+        image = (image * 255).astype(np.uint8)
             
         # SegFormer wants pixel_values (C, H, W) and labels (H, W)
         inputs = self.processor(images=image, return_tensors="pt")

@@ -144,7 +144,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         scheduler.step()
         
         model.eval()
-        val_ious = []
+        total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
         with torch.no_grad():
             for batch in val_loader:
                 pixel_values = batch["pixel_values"].to(config.DEVICE)
@@ -154,12 +154,21 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
                 preds = logits.argmax(dim=1)
-                for c in range(config.NUM_LABELS):
-                    intersection = ((preds == c) & (labels == c)).sum().item()
-                    union = ((preds == c) | (labels == c)).sum().item()
-                    if union > 0: val_ious.append(intersection / union)
+                
+                mask = (labels >= 0) & (labels < config.NUM_LABELS)
+                label_flat = labels[mask].cpu().numpy().astype(np.int64)
+                pred_flat = preds[mask].cpu().numpy().astype(np.int64)
+                total_cm += np.bincount(
+                    config.NUM_LABELS * label_flat + pred_flat,
+                    minlength=config.NUM_LABELS**2
+                ).reshape(config.NUM_LABELS, config.NUM_LABELS)
         
-        curr_miou = np.mean(val_ious) if val_ious else 0
+        # Calculate mIoU from CM
+        tp = np.diag(total_cm)
+        fp = total_cm.sum(axis=0) - tp
+        fn = total_cm.sum(axis=1) - tp
+        ious = tp / (tp + fp + fn + 1e-6)
+        curr_miou = np.mean(ious)
         avg_loss = epoch_loss / len(train_loader)
         history["loss"].append(avg_loss)
         history["miou"].append(curr_miou)
