@@ -52,11 +52,11 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True)
     
     try:
-        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE), strict=True)
+        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE, weights_only=True), strict=True)
         logging.info(f"Loaded weights from {model_path}")
     except RuntimeError as e:
         logging.warning(f"Strict load failed: {e}. Trying non-strict load...")
-        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE), strict=False)
+        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE, weights_only=True), strict=False)
         logging.warning("Non-strict load complete. Results may be garbage if architectures mismatch!")
 
     model.to(config.DEVICE).eval()
