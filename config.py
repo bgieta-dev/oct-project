@@ -20,13 +20,14 @@ EPOCHS = 80
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
 
 def get_vram_config(model_name):
-    """Auto-adjust for VRAM safety (target effective batch 16)"""
+    """Auto-adjust for VRAM safety (target effective batch 32)"""
     if "b3" in model_name:
-        return {"batch_size": 2, "accum_steps": 8}
+        return {"batch_size": 2, "accum_steps": 16}
     elif "b2" in model_name:
-        return {"batch_size": 4, "accum_steps": 4}
-    else:
-        return {"batch_size": 8, "accum_steps": 2}
+        return {"batch_size": 8, "accum_steps": 4}
+    else: # B0 or others
+        return {"batch_size": 16, "accum_steps": 2}
+
 
 VRAM = get_vram_config(MODEL_NAME)
 BATCH_SIZE = VRAM["batch_size"]
