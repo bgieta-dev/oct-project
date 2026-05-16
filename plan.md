@@ -1,43 +1,53 @@
-# Plan: OCT Segmentation for DME
+# Plan: OCT Seg (Maks)
 
-## 1. Data Prep
-- [x] Explore dataset (`data_folder/`).
-- [x] Data split: Train/Val. Patient integrity.
-- [x] Preprocessing: SegFormer norm, 512x512, augment (Flip, Bright/Contrast).
-- [ ] Deep class analysis: IRF, SRF, HRF (HRF hardest).
+## Status: Stage III (16.05 - 15.06.2025)
 
-## 2. Architecture
-- [x] SegFormer (B0) (transformers).
-- [ ] Test SegFormer-B2 for precision.
-- [x] Multi-channel: `edge_map_images` + `denoised_images` (R: Orig, G: Denoised, B: Edge).
+### Stage II (Done)
+- [x] Shared data pipeline (RETOUCH).
+- [x] Baseline SegFormer-B0 (mIoU: 0.7427).
+- [x] 2D aug (Flip, Bright/Contrast).
+- [x] Multi-modal input (Orig + Denoised + Edge).
 
-## 3. Loss & Optimization
-- [x] Hybrid Loss: $Loss = 0.5 \cdot CE + 0.5 \cdot DiceLoss$.
-- [x] AdamW, LR 1e-4.
-- [x] Weighted Focal Loss. Weight 2.0 for IRF.
-- [x] Speed: `num_workers=4`, `pin_memory=True`.
+### Stage III: Transformers & Clinical Validation (16.05 - 15.06)
+Goal: Optimize transformers. Systemic clinical comparison.
 
-## 4. Metrics
-- [x] Metrics script.
-- [x] Validation mIoU in train loop.
-- Baseline Results (SegFormer-B0):
-- mIoU: 0.6483, Dice: 0.7709
-- Class 1 (IRF) IoU: 0.4925
-- Class 2 (SRF) IoU: 0.5746
-- Class 3 (HRF) IoU: 0.5380
-- [ ] HD95 (Hausdorff Distance).
+#### 1. Model Upgrade & Stability
+- [x] Centralize config in `config.py`.
+- [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`).
+- [x] **VRAM Optimization (RTX 4060/3060):**
+    - Dynamic `batch_size` based on model size.
+    - **Gradient Accumulation** (Effective batch size = 16) for stability.
+- [ ] Move to **SegFormer-B3** for final comparison.
+- [ ] Implement **Attention Maps** visualization.
 
-## 5. Train & Validation
-- [x] Baseline train loop.
-- [x] Focal Loss with class weights.
-- [x] Auto-save `best_model.pth`.
-- [x] Train 50 epochs with Cosine LR Scheduler.
+#### 2. Advanced Preprocessing & Data
+- [x] **Intensity Normalization**: 1-99 percentile clipping + [0, 1] scaling.
+- [x] **Augmentation Expansion**: `Rotate(10)`, `GaussNoise`, `RandomResizedCrop`.
+- [x] **Stratified Split**: 80/10/10 split stratified by OCT device (Cirrus/Spectralis/Topcon).
+- [x] **Clinical Unification**: Standardized Class 3 as **PED** (Pigment Epithelium Detachment).
+- [ ] Optional: Cross-dataset test on **AROI**.
 
-## 6. Eval & Interpretation
-- [x] Visualize (`eval_results.png`).
-- [ ] Error analysis: HRF, edges.
-- [ ] Compare `denoised_images`.
+#### 3. Metrics & Benchmarking
+- [x] **Surface Metrics**: Added **HD95** (Hausdorff Distance) and **ASD** (Average Surface Distance).
+- [x] **Fixed Evaluation**: `eval.py` now picks best class-specific examples for static reporting.
+- [x] **Test Set**: Evaluation now runs on dedicated 10% test set (previously 20% val).
+- [ ] Run **nnUNet 2D baseline** (joint task with Eryk).
 
-## 7. Docs & Report
-- [ ] Metrics table.
-- [ ] Stability conclusions.
+#### 4. Thesis & Documentation (Report due 15.06)
+- [ ] Write partial report (min. 15 pages).
+- [ ] Theoretical background: CNN vs Transformers in OCT.
+- [ ] Qualitative analysis: Error cases for IRF vs SRF.
+
+---
+
+## Technical TODOs
+
+### Active Tasks
+- [ ] **SwinUNETR**: Implement model in MONAI framework.
+- [ ] **Attention maps**: Script to extract transformer weights for IRF/SRF focus.
+- [ ] **B3 Training**: Run long training (50+ epochs) on B3.
+
+### Done
+- [x] Add log
+- [x] Test B2 model
+- [x] Add HD95/ASD to main.py logging.

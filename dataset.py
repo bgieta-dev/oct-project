@@ -30,13 +30,19 @@ class OCTDataset(Dataset):
             image = np.stack([orig, denoised, edge], axis=-1)
         else:
             image = np.array(Image.open(img_path).convert("RGB"))
-            
+
         mask = np.array(Image.open(self.mask_paths[idx]))
         
         if self.transform:
             augmented = self.transform(image=image, mask=mask)
             image = augmented["image"]
             mask = augmented["mask"]
+
+        # 1-99 Percentile Normalization
+        image = image.astype(np.float32)
+        p1, p99 = np.percentile(image, (1, 99))
+        image = np.clip(image, p1, p99)
+        image = (image - p1) / (p99 - p1 + 1e-8)
             
         # SegFormer wants pixel_values (C, H, W) and labels (H, W)
         inputs = self.processor(images=image, return_tensors="pt")

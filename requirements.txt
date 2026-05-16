@@ -7,3 +7,6 @@ scikit-learn
 matplotlib
 tqdm
 torchvision
+medpy
+SimpleITK
+scipy

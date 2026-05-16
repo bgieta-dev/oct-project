@@ -1,40 +1,51 @@
-# Scans
-https://www.kaggle.com/datasets/saivikassingamsetty/retouch?resource=download-directory&select=retouch_processed
+# OCT Fluid Segmentation (Student 2: Maksymilian)
 
-# Project
-Task: Neural net for OCT segmentation in DME diagnosis.
+Automated segmentation of retinal biomarkers in OCT images using Transformer-based architectures.
 
-DME (Diabetic Macular Edema): Vision loss from retinal vessel damage.
+## Clinical Context
+Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
+- **IRF**: Intraretinal Fluid (cysts within layers).
+- **SRF**: Subretinal Fluid (detachment under retina).
+- **PED**: Pigment Epithelium Detachment (RPE lift).
 
-IRF: Black spaces in retina, cysts. Intraretinal. Mostly Henle’s layer.
-SRF: Black space between retina and RPE. Retinal detachment. Subretinal.
-HRF: Small bright spots. All layers. Predict inflammation/lipids.
+## Key Features
+- **Architecture**: SegFormer (B0-B3 backbones) with MiT encoders.
+- **Preprocessing**: 
+  - Clinical Intensity Normalization (1-99 percentile clipping).
+  - Heavy Augmentation: Rotate, GaussNoise, RandomResizedCrop (Albumentations 2.0).
+- **Input Strategy**: Multi-modal stack (3 channels: Original + Denoised + Edge map).
+- **Optimization**:
+  - Hybrid Loss: $0.5 \cdot FocalLoss + 0.5 \cdot DiceLoss$.
+  - Gradient Accumulation: Simulated batch size 16 for RTX 3060/4060 stability.
+- **Evaluation**: 
+  - Stratified 80/10/10 Split (by OCT device: Cirrus, Spectralis, Topcon).
+  - Metrics: Dice, IoU, **HD95** (Hausdorff Distance), **ASD** (Average Surface Distance).
+  - Class-specific fixed visualization for static reporting.
 
-# Models
-https://github.com/qubvel-org/segmentation_models.pytorch
+## Project Structure
+- `config.py`: Central source of truth for all parameters.
+- `train.py`: Training loop with gradient accumulation and weighted loss.
+- `eval.py`: Quantitative and qualitative evaluation on the test set.
+- `main.py`: Pipeline entry point (Train -> Eval -> Archive).
+- `dataset.py`: Patient-aware OCT loader with percentile normalization.
 
-CNN: UNet++, MA-Net
-Transformers: DPT, SegFormer
+## Requirements
+```bash
+pip install torch transformers albumentations scikit-learn matplotlib tqdm medpy SimpleITK
+```
 
-Refs:
-- Oktay (2018) Attention U-Net: https://arxiv.org/abs/1804.03999
-- Zhou (2018) UNet++: https://arxiv.org/abs/1807.10165
-- Lee (2022) MDPI Sensors: https://www.mdpi.com/1424-8220/22/8/3055
-- Vaswani (2017) Attention: https://arxiv.org/abs/1706.03762
-- Dosovitskiy (2020) ViT: https://arxiv.org/abs/2010.11929
-- Xie (2021) SegFormer: https://arxiv.org/abs/2105.15203
-- Tang (2022) SwinUNETR: https://arxiv.org/abs/2201.01266
+## Usage
+1. Configure settings in `config.py` (e.g., set `MODEL_NAME = "nvidia/mit-b2"`).
+2. Run pipeline:
+```bash
+python main.py
+```
+3. Check `experiments/run_TIMESTAMP/` for logs, `best_model.pth`, and `predictions.png`.
 
-# Methods
-Hybrid Loss: $Loss = a \cdot DiceLoss + b \cdot FocalLoss$
+---
 
-Focal Loss: Handle imbalance. Focus on hard pixels.
-GDL: Weight by inverse size. Balance small HRF.
-
-Metrics:
-- Precision/Recall: Sensitivity + false alarms.
-- IoU (Jaccard): Strict, pixel-sensitive.
-- HD95: Contour distance. Shape precision.
-
-Focal Loss detects HRF. HD95 evaluates morphology.
-
+## References
+- Ronneberger (2015) U-Net
+- Xie (2021) SegFormer
+- Tang (2022) SwinUNETR
+- Isensee (2021) nnU-Net
