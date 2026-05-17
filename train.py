@@ -103,7 +103,13 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    focal_criterion = FocalLoss(alpha=torch.tensor([1.0, 2.0, 1.0, 1.0]).to(config.DEVICE), gamma=2.0)
+    
+    # Class 0: Background (0.2)
+    # Class 1: IRF (5.0) - Hardest
+    # Class 2: SRF (2.0)
+    # Class 3: PED (2.0)
+    class_weights = torch.tensor([0.2, 5.0, 2.0, 2.0]).to(config.DEVICE)
+    focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     best_miou = 0.0
     start_time = time.time()
