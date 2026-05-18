@@ -112,6 +112,8 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     best_miou = 0.0
+    patience = 15
+    epochs_no_improve = 0
     start_time = time.time()
     history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
