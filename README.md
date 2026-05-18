@@ -44,6 +44,21 @@ python main.py
 
 ---
 
+## Experiments
+
+### 2026-05-18 (Current Run)
+**Model:** SegFormer (nvidia/mit-b2)
+**Setup:** `LR=1e-4` with 5-epoch warmup (`get_cosine_schedule_with_warmup`), Early Stopping (15 epochs patience). Evaluation includes `Avg Regions GT/Pred` counting via `scipy.ndimage`. 
+**Status:** Starting training to verify stability and performance improvements.
+
+### 2026-05-17
+**Model:** SegFormer (nvidia/mit-b2)
+**Results:** Final mIoU: 0.7125, Final mDice: 0.8220
+**Observations:** Training was highly unstable. Around epoch 24, the model collapsed to predicting only background, driving mIoU down to ~0.24. It eventually recovered at epoch 68 as the `CosineAnnealingLR` decayed the learning rate.
+**Conclusions:** The `mit-b2` Transformer requires a learning rate warmup phase (e.g. 5 epochs) when trained with AdamW at `LR=1e-4` to prevent gradient spikes and local minimum collapse early in training.
+
+---
+
 ## References
 - Ronneberger (2015) U-Net
 - Xie (2021) SegFormer

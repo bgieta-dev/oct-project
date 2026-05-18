@@ -2,7 +2,7 @@ import os
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
+from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor, get_cosine_schedule_with_warmup
 import albumentations as A
 from sklearn.model_selection import train_test_split
 import time
@@ -102,7 +102,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=5, num_training_steps=epochs)
     
     # Class 0: Background (0.2)
     # Class 1: IRF (5.0) - Hardest
@@ -186,17 +186,25 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             best_miou = curr_miou
             torch.save(model.state_dict(), save_path)
             logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= patience:
+                logging.info(f"Early stopping triggered after {epoch+1} epochs!")
+                break
 
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(history["loss"]); plt.title("Loss History"); plt.xlabel("Epoch"); plt.ylabel("Loss")
-    plt.subplot(1, 2, 2)
-    plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "metrics.png"))
+        plt.figure(figsize=(12, 5))
+        plt.subplot(1, 2, 1)
+        plt.plot(history["loss"]); plt.title("Loss History"); plt.xlabel("Epoch"); plt.ylabel("Loss")
+        plt.subplot(1, 2, 2)
+        plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "metrics.png"))
+        plt.close()
 
     logging.info(f"Training complete. Total time: {str(timedelta(seconds=int(time.time() - start_time)))}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     train_model()
+in_model()

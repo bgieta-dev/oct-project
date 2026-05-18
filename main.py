@@ -77,7 +77,9 @@ def main():
         iou = metrics['class_ious'][c]
         dice = metrics['class_dices'][c]
         hd = metrics['class_hd95'][c]
-        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f}")
+        avg_reg_gt = metrics['class_avg_regions_gt'][c]
+        avg_reg_pred = metrics['class_avg_regions_pred'][c]
+        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | Avg Regions GT: {avg_reg_gt:.1f} | Avg Regions Pred: {avg_reg_pred:.1f}")
 
     # archiving project docs and scripts
     for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt"]:
