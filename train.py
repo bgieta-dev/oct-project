@@ -207,4 +207,3 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     train_model()
-in_model()
