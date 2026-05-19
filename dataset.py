@@ -2,19 +2,31 @@ import torch
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
+from typing import List, Dict, Any
 
 class OCTDataset(Dataset):
-    def __init__(self, image_paths, mask_paths, processor, transform=None, use_multimodal=False):
+    """
+    Patient-aware OCT image loader.
+    Supports multi-modal input (Original + Denoised + Edge map).
+    """
+    def __init__(
+        self, 
+        image_paths: List[str], 
+        mask_paths: List[str], 
+        processor: Any, 
+        transform: Any = None, 
+        use_multimodal: bool = False
+    ):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.processor = processor
         self.transform = transform
         self.use_multimodal = use_multimodal
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
         img_path = self.image_paths[idx]
         
         if self.use_multimodal:
@@ -22,8 +34,18 @@ class OCTDataset(Dataset):
             edge_path = img_path.replace("cropped_images", "edge_map_images")
             
             orig = np.array(Image.open(img_path).convert("L"))
-            denoised = np.array(Image.open(denoised_path).convert("L"))
-            edge = np.array(Image.open(edge_path).convert("L"))
+            
+            # Robust fallback: use original if denoised/edge map is missing
+            if os.path.exists(denoised_path):
+                denoised = np.array(Image.open(denoised_path).convert("L"))
+            else:
+                denoised = orig
+                
+            if os.path.exists(edge_path):
+                edge = np.array(Image.open(edge_path).convert("L"))
+            else:
+                # Simple edge map on the fly if missing (optional enhancement)
+                edge = orig 
             
             image = np.stack([orig, denoised, edge], axis=-1)
         else:

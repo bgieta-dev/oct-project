@@ -16,24 +16,9 @@ from scipy import ndimage
 from dataset import OCTDataset
 import logging
 import config
+from utils import get_stratified_splits
 
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
-
-def get_stratified_splits(all_files):
-    patient_to_device = {}
-    for f in all_files:
-        parts = f.split("_")
-        device = parts[0]
-        patient = "_".join(parts[:2])
-        if patient not in patient_to_device:
-            patient_to_device[patient] = device
-    patients = np.array(list(patient_to_device.keys()))
-    devices = np.array(list(patient_to_device.values()))
-    _, temp_pts, _, temp_devs = train_test_split(
-        patients, devices, test_size=0.20, random_state=42, stratify=devices
-    )
-    _, test_pts = train_test_split(temp_pts, test_size=0.50, random_state=42, stratify=temp_devs)
-    return test_pts
 
 def evaluate_model(model_path="best_model.pth", output_dir="."):
     all_files = sorted(os.listdir(config.IMG_DIR))
@@ -43,7 +28,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             test_patients = f.read().splitlines()
         logging.info("Loaded test set from test_patients.txt")
     else:
-        test_patients = get_stratified_splits(all_files)
+        _, _, test_patients = get_stratified_splits(all_files)
         logging.info("Recreated stratified test split")
 
     test_imgs = [os.path.join(config.IMG_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
@@ -64,7 +49,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
     model.to(config.DEVICE).eval()
 
-    val_transform = A.Compose([A.Resize(height=512, width=512)])
+    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
     ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
     loader = DataLoader(ds, batch_size=config.BATCH_SIZE, shuffle=False)
 
@@ -93,6 +78,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     class_asd_vals = {1: [], 2: [], 3: []}
     class_region_counts_gt = {1: [], 2: [], 3: []}
     class_region_counts_pred = {1: [], 2: [], 3: []}
+    image_ious = [] # Track per-image IoU for failure analysis
 
     global_idx = 0
     for batch in tqdm(loader):
@@ -105,6 +91,18 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             logits = torch.nn.functional.interpolate(
                 outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
             )
+            
+            if config.USE_TTA:
+                # TTA: Horizontal Flip
+                flipped_pixels = torch.flip(pixel_values, [3])
+                flipped_outputs = model(pixel_values=flipped_pixels)
+                flipped_logits = torch.nn.functional.interpolate(
+                    flipped_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
+                )
+                # Unflip and average
+                unflipped_logits = torch.flip(flipped_logits, [3])
+                logits = (logits + unflipped_logits) / 2.0
+
             preds_batch = logits.argmax(dim=1).cpu().numpy()
 
         for b_idx in range(len(preds_batch)):
@@ -147,6 +145,15 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 minlength=config.NUM_LABELS**2
             ).reshape(config.NUM_LABELS, config.NUM_LABELS)
 
+            # Per-image mIoU for failure analysis
+            img_cm = np.bincount(config.NUM_LABELS * label_flat + pred_flat, minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
+            img_tp = np.diag(img_cm)
+            img_fp = img_cm.sum(axis=0) - img_tp
+            img_fn = img_cm.sum(axis=1) - img_tp
+            img_iou_vals = img_tp / (img_tp + img_fp + img_fn + 1e-6)
+            fluid_miou = np.mean(img_iou_vals[1:]) # mIoU of fluid classes
+            image_ious.append((fluid_miou, global_idx - 1, orig_img, labels, pred))
+
             # Visualization for fixed class-specific indices
             if i in target_indices:
                 c_id = [k for k, v in vis_indices.items() if v == i][0]
@@ -160,6 +167,20 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     plt.savefig(vis_path)
     plt.close() # Free memory
     logging.info(f"Saved visualization to {vis_path}")
+
+    # Save Worst Predictions (Failure Analysis)
+    failure_dir = os.path.join(output_dir, "failures")
+    os.makedirs(failure_dir, exist_ok=True)
+    image_ious.sort(key=lambda x: x[0]) # Sort by mIoU ascending
+    for rank, (iou, idx, img, gt, pr) in enumerate(image_ious[:5]):
+        plt.figure(figsize=(12, 4))
+        plt.subplot(1, 3, 1); plt.imshow(img); plt.title(f"Worst {rank+1} (mIoU: {iou:.3f})"); plt.axis("off")
+        plt.subplot(1, 3, 2); plt.imshow(gt, cmap="jet"); plt.title("Ground Truth"); plt.axis("off")
+        plt.subplot(1, 3, 3); plt.imshow(pr, cmap="jet"); plt.title("Prediction"); plt.axis("off")
+        plt.tight_layout()
+        plt.savefig(os.path.join(failure_dir, f"failure_{rank+1}_idx_{idx}.png"))
+        plt.close()
+    logging.info(f"Saved 5 worst failure cases to {failure_dir}")
 
     # Calculate metrics from confusion matrix
     tp = np.diag(total_cm)

@@ -46,10 +46,12 @@ python main.py
 
 ## Experiments
 
-### 2026-05-19 (test3 - Current Run)
+### 2026-05-19 (test3)
 **Model:** SegFormer (nvidia/mit-b2)
+**Results:** Final mIoU: 0.6879, Final mDice: 0.8047, mHD95: 70.47, mASD: 21.77
 **Setup:** `LR=5e-5`, Warmup: 10 epochs, Early Stopping Patience: 10.
-**Rationale:** Previous run (1e-4 with 5-epoch warmup) failed at epoch 27. Lowering base LR and extending warmup to ensure gradient stability in the Transformer encoder.
+**Rationale:** Previous runs failed due to instability. Lowering LR and extending warmup to 10 epochs (Cosine schedule) stabilized training. Early stopping triggered at epoch 29.
+**Observations:** Significantly better stability. IRF (Class 1) remains the hardest class to segment precisely (IoU: 0.60).
 
 ### 2026-05-18 (test2 Failed Run)
 **Model:** SegFormer (nvidia/mit-b2)

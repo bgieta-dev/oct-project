@@ -4,7 +4,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor, get_cosine_schedule_with_warmup
 import albumentations as A
-from sklearn.model_selection import train_test_split
 import time
 from datetime import timedelta
 from tqdm import tqdm
@@ -14,6 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import config
+from utils import get_stratified_splits
 
 class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=None, gamma=2, reduction='mean'):
@@ -39,26 +39,20 @@ def dice_loss(pred, target, num_classes=config.NUM_LABELS):
     dice = (2. * intersection + 1e-6) / (cardinality + 1e-6)
     return 1 - dice.mean()
 
-def get_stratified_splits(all_files):
-    patient_to_device = {}
-    for f in all_files:
-        parts = f.split("_")
-        device = parts[0]
-        patient = "_".join(parts[:2])
-        if patient not in patient_to_device:
-            patient_to_device[patient] = device
-            
-    patients = np.array(list(patient_to_device.keys()))
-    devices = np.array(list(patient_to_device.values()))
+def calculate_dynamic_weights(mask_paths, num_classes=config.NUM_LABELS):
+    logging.info("Calculating dynamic class weights...")
+    counts = np.zeros(num_classes)
+    from PIL import Image
+    for p in tqdm(mask_paths, desc="Scanning masks"):
+        m = np.array(Image.open(p))
+        counts += np.bincount(m.flatten(), minlength=num_classes)
     
-    train_pts, temp_pts, _, temp_devs = train_test_split(
-        patients, devices, test_size=0.20, random_state=42, stratify=devices
-    )
-    
-    val_pts, test_pts = train_test_split(
-        temp_pts, test_size=0.50, random_state=42, stratify=temp_devs
-    )
-    return train_pts, val_pts, test_pts
+    # Inverse frequency weighting
+    weights = 1.0 / (counts + 1e-6)
+    weights = weights / weights.sum() * num_classes
+    # Ensure background doesn't dominate too much (cap it)
+    weights[0] = min(weights[0], 0.2)
+    return weights
 
 def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."):
     all_files = sorted(os.listdir(config.IMG_DIR))
@@ -81,14 +75,23 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     train_imgs, train_masks = get_paths(train_patients)
     val_imgs, val_masks = get_paths(val_patients)
 
+    # Dynamic Weights
+    if config.USE_DYNAMIC_WEIGHTS:
+        dyn_weights = calculate_dynamic_weights(train_masks)
+        logging.info(f"Dynamic weights: {dyn_weights}")
+        class_weights = torch.tensor(dyn_weights, dtype=torch.float32).to(config.DEVICE)
+    else:
+        class_weights = torch.tensor(config.CLASS_WEIGHTS).to(config.DEVICE)
+
     train_transform = A.Compose([
-        A.RandomResizedCrop(size=(512, 512), scale=(0.8, 1.0), p=1.0),
-        A.HorizontalFlip(p=0.5),
-        A.Rotate(limit=10, p=0.5),
-        A.RandomBrightnessContrast(p=0.2),
-        A.GaussNoise(std_range=(0.02, 0.1), p=0.2),
+        A.RandomResizedCrop(size=config.AUG_SIZE, scale=config.AUG_SCALE, p=1.0),
+        A.HorizontalFlip(p=config.AUG_PROBS["flip"]),
+        A.Rotate(limit=10, p=config.AUG_PROBS["rotate"]),
+        A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
+        A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
+        A.GaussNoise(std_range=(0.02, 0.1), p=config.AUG_PROBS["noise"]),
     ])
-    val_transform = A.Compose([A.Resize(height=512, width=512)])
+    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
 
     processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
     processor.do_reduce_labels = False
@@ -103,14 +106,16 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True
     ).to(config.DEVICE)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+    if config.OPTIMIZER_TYPE == "AdamW":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+    elif config.OPTIMIZER_TYPE == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=config.LR, momentum=0.9)
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+        
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=epochs)
     
-    # Class 0: Background (0.2)
-    # Class 1: IRF (5.0) - Hardest
-    # Class 2: SRF (2.0)
-    # Class 3: PED (2.0)
-    class_weights = torch.tensor([0.2, 5.0, 2.0, 2.0]).to(config.DEVICE)
+    scaler = torch.cuda.amp.GradScaler(enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     best_miou = 0.0
@@ -119,7 +124,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     start_time = time.time()
     history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
-    logging.info(f"Config: MODEL_NAME={config.MODEL_NAME}, BATCH_SIZE={config.BATCH_SIZE}, ACCUM_STEPS={config.ACCUMULATION_STEPS}, LR={config.LR}, DEVICE={config.DEVICE}")
+    logging.info(f"Config: MODEL_NAME={config.MODEL_NAME}, BATCH_SIZE={config.BATCH_SIZE}, ACCUM_STEPS={config.ACCUMULATION_STEPS}, LR={config.LR}, DEVICE={config.DEVICE}, AMP={config.USE_AMP}")
 
     for epoch in range(epochs):
         epoch_start = time.time()
@@ -132,70 +137,80 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             pixel_values = batch["pixel_values"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
             
-            outputs = model(pixel_values=pixel_values, labels=labels)
-            logits = torch.nn.functional.interpolate(
-                outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-            )
+            with torch.cuda.amp.autocast(enabled=config.USE_AMP):
+                outputs = model(pixel_values=pixel_values, labels=labels)
+                logits = torch.nn.functional.interpolate(
+                    outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                )
+                loss = (0.5 * focal_criterion(logits, labels) + 0.5 * dice_loss(logits, labels)) / config.ACCUMULATION_STEPS
             
-            loss = (0.5 * focal_criterion(logits, labels) + 0.5 * dice_loss(logits, labels)) / config.ACCUMULATION_STEPS
-            loss.backward()
+            scaler.scale(loss).backward()
             
             if (i + 1) % config.ACCUMULATION_STEPS == 0:
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
             
             epoch_loss += loss.item() * config.ACCUMULATION_STEPS
             pbar.set_postfix({"loss": f"{loss.item() * config.ACCUMULATION_STEPS:.4f}"})
         
         if (len(train_loader)) % config.ACCUMULATION_STEPS != 0:
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
         
         scheduler.step()
         
-        model.eval()
-        total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
-        with torch.no_grad():
-            for batch in val_loader:
-                pixel_values = batch["pixel_values"].to(config.DEVICE)
-                labels = batch["labels"].to(config.DEVICE)
-                outputs = model(pixel_values=pixel_values)
-                logits = torch.nn.functional.interpolate(
-                    outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                preds = logits.argmax(dim=1)
-                
-                mask = (labels >= 0) & (labels < config.NUM_LABELS)
-                label_flat = labels[mask].cpu().numpy().astype(np.int64)
-                pred_flat = preds[mask].cpu().numpy().astype(np.int64)
-                total_cm += np.bincount(
-                    config.NUM_LABELS * label_flat + pred_flat,
-                    minlength=config.NUM_LABELS**2
-                ).reshape(config.NUM_LABELS, config.NUM_LABELS)
-        
-        # Calculate mIoU from CM
-        tp = np.diag(total_cm)
-        fp = total_cm.sum(axis=0) - tp
-        fn = total_cm.sum(axis=1) - tp
-        ious = tp / (tp + fp + fn + 1e-6)
-        curr_miou = np.mean(ious)
-        avg_loss = epoch_loss / len(train_loader)
-        history["loss"].append(avg_loss)
-        history["miou"].append(curr_miou)
-        
-        epoch_dur = time.time() - epoch_start
-        logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | Time: {int(epoch_dur)}s")
-        
-        if curr_miou > best_miou:
-            best_miou = curr_miou
-            torch.save(model.state_dict(), save_path)
-            logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
-            epochs_no_improve = 0
+        if (epoch + 1) % config.VAL_INTERVAL == 0:
+            model.eval()
+            total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
+            with torch.no_grad():
+                for batch in val_loader:
+                    pixel_values = batch["pixel_values"].to(config.DEVICE)
+                    labels = batch["labels"].to(config.DEVICE)
+                    with torch.cuda.amp.autocast(enabled=config.USE_AMP):
+                        outputs = model(pixel_values=pixel_values)
+                    logits = torch.nn.functional.interpolate(
+                        outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                    )
+                    preds = logits.argmax(dim=1)
+                    
+                    mask = (labels >= 0) & (labels < config.NUM_LABELS)
+                    label_flat = labels[mask].cpu().numpy().astype(np.int64)
+                    pred_flat = preds[mask].cpu().numpy().astype(np.int64)
+                    total_cm += np.bincount(
+                        config.NUM_LABELS * label_flat + pred_flat,
+                        minlength=config.NUM_LABELS**2
+                    ).reshape(config.NUM_LABELS, config.NUM_LABELS)
+            
+            # Calculate mIoU from CM
+            tp = np.diag(total_cm)
+            fp = total_cm.sum(axis=0) - tp
+            fn = total_cm.sum(axis=1) - tp
+            ious = tp / (tp + fp + fn + 1e-6)
+            curr_miou = np.mean(ious)
+            avg_loss = epoch_loss / len(train_loader)
+            history["loss"].append(avg_loss)
+            history["miou"].append(curr_miou)
+            
+            epoch_dur = time.time() - epoch_start
+            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | Time: {int(epoch_dur)}s")
+            
+            if curr_miou > best_miou:
+                best_miou = curr_miou
+                torch.save(model.state_dict(), save_path)
+                logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    logging.info(f"Early stopping triggered after {epoch+1} epochs!")
+                    break
         else:
-            epochs_no_improve += 1
-            if epochs_no_improve >= patience:
-                logging.info(f"Early stopping triggered after {epoch+1} epochs!")
-                break
+            avg_loss = epoch_loss / len(train_loader)
+            history["loss"].append(avg_loss)
+            epoch_dur = time.time() - epoch_start
+            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | (Val Skipped) | Time: {int(epoch_dur)}s")
 
         plt.figure(figsize=(12, 5))
         plt.subplot(1, 2, 1)
