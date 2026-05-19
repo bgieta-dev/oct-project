@@ -87,7 +87,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         A.RandomResizedCrop(size=config.AUG_SIZE, scale=config.AUG_SCALE, p=1.0),
         A.HorizontalFlip(p=config.AUG_PROBS["flip"]),
         A.Rotate(limit=10, p=config.AUG_PROBS["rotate"]),
-        A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
+        A.ElasticTransform(alpha=1, sigma=50, p=0.2),
         A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
         A.GaussNoise(std_range=(0.02, 0.1), p=config.AUG_PROBS["noise"]),
     ])
@@ -115,7 +115,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=epochs)
     
-    scaler = torch.cuda.amp.GradScaler(enabled=config.USE_AMP)
+    scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     best_miou = 0.0
