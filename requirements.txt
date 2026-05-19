@@ -8,3 +8,4 @@ tqdm
 medpy
 SimpleITK
 scipy
+python-dotenv

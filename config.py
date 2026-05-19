@@ -1,5 +1,8 @@
 import os
 import torch
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 # Paths
 DATA_DIR = "data_folder"
@@ -20,7 +23,7 @@ EPOCHS = 80
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
 
 # Notifications
-DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1506191966810017894/JWfULgYtN9LpDjlv_NQMfbB5nGuG1aW2xxc_u-yrrvSRqZT2iOvCS6cFJ6j72lEOIxJC"
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 def get_vram_config(model_name):
     """Auto-adjust for VRAM safety (target effective batch 32)"""
