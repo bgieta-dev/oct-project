@@ -1,0 +1,65 @@
+2026-05-18 11:08:54,286 | INFO     | root:main:48 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-18_11-08-54
+2026-05-18 11:08:54,288 | INFO     | root:main:51 - Device: NVIDIA GeForce RTX 3060
+2026-05-18 11:08:54,289 | INFO     | root:main:53 - GPU Memory: 12.00 GB
+2026-05-18 11:08:54,289 | INFO     | root:main:57 - --- TRAINING ---
+2026-05-18 11:08:54,309 | INFO     | root:train_model:68 - Split: Train=56, Val=7, Test=7
+2026-05-18 11:08:54,727 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-18 11:08:55,968 | INFO     | root:train_model:119 - Starting training for 80 epochs...
+2026-05-18 11:08:55,968 | INFO     | root:train_model:120 - Config: MODEL_NAME=nvidia/mit-b2, BATCH_SIZE=8, ACCUM_STEPS=4, LR=0.0001, DEVICE=cuda
+2026-05-18 11:19:39,665 | INFO     | root:train_model:185 - Epoch 1 | Loss: 0.5198 | mIoU: 0.0359 | Time: 643s
+2026-05-18 11:19:39,791 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.0359)
+2026-05-18 11:30:22,894 | INFO     | root:train_model:185 - Epoch 2 | Loss: 0.4093 | mIoU: 0.3980 | Time: 642s
+2026-05-18 11:30:23,020 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.3980)
+2026-05-18 11:41:07,276 | INFO     | root:train_model:185 - Epoch 3 | Loss: 0.2654 | mIoU: 0.6743 | Time: 644s
+2026-05-18 11:41:07,403 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.6743)
+2026-05-18 11:52:28,683 | INFO     | root:train_model:185 - Epoch 4 | Loss: 0.2004 | mIoU: 0.6938 | Time: 681s
+2026-05-18 11:52:28,810 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.6938)
+2026-05-18 12:03:12,870 | INFO     | root:train_model:185 - Epoch 5 | Loss: 0.1719 | mIoU: 0.7061 | Time: 643s
+2026-05-18 12:03:12,990 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7061)
+2026-05-18 12:13:56,463 | INFO     | root:train_model:185 - Epoch 6 | Loss: 0.1685 | mIoU: 0.7396 | Time: 643s
+2026-05-18 12:13:56,589 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7396)
+2026-05-18 12:24:40,671 | INFO     | root:train_model:185 - Epoch 7 | Loss: 0.1575 | mIoU: 0.6348 | Time: 643s
+2026-05-18 12:35:25,068 | INFO     | root:train_model:185 - Epoch 8 | Loss: 0.1533 | mIoU: 0.7643 | Time: 644s
+2026-05-18 12:35:25,189 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7643)
+2026-05-18 12:46:10,858 | INFO     | root:train_model:185 - Epoch 9 | Loss: 0.1476 | mIoU: 0.7658 | Time: 645s
+2026-05-18 12:46:10,968 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7658)
+2026-05-18 12:56:56,072 | INFO     | root:train_model:185 - Epoch 10 | Loss: 0.1446 | mIoU: 0.7616 | Time: 644s
+2026-05-18 13:08:34,077 | INFO     | root:train_model:185 - Epoch 11 | Loss: 0.1491 | mIoU: 0.7524 | Time: 697s
+2026-05-18 13:19:18,428 | INFO     | root:train_model:185 - Epoch 12 | Loss: 0.1426 | mIoU: 0.7609 | Time: 644s
+2026-05-18 13:30:03,841 | INFO     | root:train_model:185 - Epoch 13 | Loss: 0.1396 | mIoU: 0.7619 | Time: 645s
+2026-05-18 13:40:47,845 | INFO     | root:train_model:185 - Epoch 14 | Loss: 0.1401 | mIoU: 0.7590 | Time: 643s
+2026-05-18 13:51:31,659 | INFO     | root:train_model:185 - Epoch 15 | Loss: 0.1379 | mIoU: 0.7684 | Time: 643s
+2026-05-18 13:51:31,781 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7684)
+2026-05-18 14:02:16,257 | INFO     | root:train_model:185 - Epoch 16 | Loss: 0.1373 | mIoU: 0.7806 | Time: 644s
+2026-05-18 14:02:16,393 | INFO     | root:train_model:190 - New best model saved! (mIoU: 0.7806)
+2026-05-18 14:13:00,243 | INFO     | root:train_model:185 - Epoch 17 | Loss: 0.1360 | mIoU: 0.7681 | Time: 643s
+2026-05-18 14:23:44,223 | INFO     | root:train_model:185 - Epoch 18 | Loss: 0.1371 | mIoU: 0.7710 | Time: 643s
+2026-05-18 14:34:27,396 | INFO     | root:train_model:185 - Epoch 19 | Loss: 0.1352 | mIoU: 0.7797 | Time: 642s
+2026-05-18 14:45:11,391 | INFO     | root:train_model:185 - Epoch 20 | Loss: 0.1329 | mIoU: 0.7693 | Time: 643s
+2026-05-18 14:55:55,593 | INFO     | root:train_model:185 - Epoch 21 | Loss: 0.1349 | mIoU: 0.7605 | Time: 643s
+2026-05-18 15:06:39,977 | INFO     | root:train_model:185 - Epoch 22 | Loss: 0.1363 | mIoU: 0.7670 | Time: 644s
+2026-05-18 15:17:24,142 | INFO     | root:train_model:185 - Epoch 23 | Loss: 0.1352 | mIoU: 0.7781 | Time: 643s
+2026-05-18 15:28:08,367 | INFO     | root:train_model:185 - Epoch 24 | Loss: 0.1374 | mIoU: 0.7713 | Time: 643s
+2026-05-18 15:38:52,346 | INFO     | root:train_model:185 - Epoch 25 | Loss: 0.1354 | mIoU: 0.7458 | Time: 643s
+2026-05-18 15:49:35,136 | INFO     | root:train_model:185 - Epoch 26 | Loss: 0.1370 | mIoU: 0.7453 | Time: 642s
+2026-05-18 16:00:17,747 | INFO     | root:train_model:185 - Epoch 27 | Loss: 0.1352 | mIoU: 0.2510 | Time: 642s
+2026-05-18 16:11:01,552 | INFO     | root:train_model:185 - Epoch 28 | Loss: 0.1393 | mIoU: 0.2409 | Time: 643s
+2026-05-18 16:21:46,319 | INFO     | root:train_model:185 - Epoch 29 | Loss: 0.1353 | mIoU: 0.2409 | Time: 644s
+2026-05-18 16:32:29,164 | INFO     | root:train_model:185 - Epoch 30 | Loss: 0.1361 | mIoU: 0.2409 | Time: 642s
+2026-05-18 16:43:12,138 | INFO     | root:train_model:185 - Epoch 31 | Loss: 0.1370 | mIoU: 0.2409 | Time: 642s
+2026-05-18 16:43:12,138 | INFO     | root:train_model:195 - Early stopping triggered after 31 epochs!
+2026-05-18 16:43:12,138 | INFO     | root:train_model:207 - Training complete. Total time: 5:34:16
+2026-05-18 16:43:12,347 | INFO     | root:main:69 - --- EVALUATION ---
+2026-05-18 16:43:12,370 | INFO     | root:evaluate_model:42 - Loaded test set from test_patients.txt
+2026-05-18 16:43:14,895 | INFO     | root:evaluate_model:57 - Loaded weights from best_model.pth
+2026-05-18 16:43:14,943 | INFO     | root:evaluate_model:72 - Scanning for best class-specific examples...
+2026-05-18 16:43:25,954 | INFO     | root:evaluate_model:82 - Fixed vis indices: {1: 331, 2: 283, 3: 556}
+2026-05-18 16:43:26,065 | INFO     | root:evaluate_model:87 - Evaluating on 85 batches...
+2026-05-18 16:43:26,067 | INFO     | root:evaluate_model:88 - Config: MODEL_NAME=nvidia/mit-b2, USE_MULTIMODAL=True, DEVICE=cuda
+2026-05-18 16:44:33,922 | INFO     | root:evaluate_model:160 - Saved visualization to C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-18_11-08-54\predictions.png
+2026-05-18 16:44:33,934 | INFO     | root:main:72 - Final mIoU: 0.7149 | Final mDice: 0.8247
+2026-05-18 16:44:33,936 | INFO     | root:main:73 - Final mHD95: 70.2074 | Final mASD: 23.2581
+2026-05-18 16:44:33,936 | INFO     | root:main:82 - Class 1 (IRF) | IoU: 0.5914 | Dice: 0.7433 | HD95: 41.87 | Avg Regions GT: 8.9 | Avg Regions Pred: 6.3
+2026-05-18 16:44:33,936 | INFO     | root:main:82 - Class 2 (SRF) | IoU: 0.6953 | Dice: 0.8203 | HD95: 91.59 | Avg Regions GT: 1.3 | Avg Regions Pred: 1.9
+2026-05-18 16:44:33,936 | INFO     | root:main:82 - Class 3 (PED) | IoU: 0.5964 | Dice: 0.7472 | HD95: 77.16 | Avg Regions GT: 1.3 | Avg Regions Pred: 2.3
+2026-05-18 16:44:34,048 | INFO     | root:main:89 - Pipeline finished.
