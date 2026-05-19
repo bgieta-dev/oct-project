@@ -3,10 +3,22 @@ import logging
 import shutil
 import gc
 import torch
+import requests
+import json
 from datetime import datetime
 from train import train_model
 from eval import evaluate_model
 import config
+
+def send_discord_notification(message):
+    if not config.DISCORD_WEBHOOK_URL:
+        return
+    try:
+        payload = {"content": message}
+        requests.post(config.DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+    except Exception as e:
+        logging.error(f"Failed to send Discord notification: {e}")
+
 
 def setup_logging(exp_dir):
     log_file = os.path.join(exp_dir, "experiment.log")
@@ -87,6 +99,12 @@ def main():
             shutil.copy(f, os.path.join(exp_dir, f))
             
     logging.info(f"Pipeline finished.")
+
+    # Discord Notification
+    msg = f"**Training Finished!**\nRun: `{os.path.basename(exp_dir)}`\n"
+    msg += f"mIoU: `{metrics['mIoU']:.4f}` | mDice: `{metrics['mDice']:.4f}`\n"
+    msg += f"HD95: `{metrics['mHD95']:.2f}`"
+    send_discord_notification(msg)
 
 if __name__ == "__main__":
     main()

@@ -19,6 +19,9 @@ EPOCHS = 80
 # Class Definitions
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
 
+# Notifications
+DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1506191966810017894/JWfULgYtN9LpDjlv_NQMfbB5nGuG1aW2xxc_u-yrrvSRqZT2iOvCS6cFJ6j72lEOIxJC"
+
 def get_vram_config(model_name):
     """Auto-adjust for VRAM safety (target effective batch 32)"""
     if "b3" in model_name:
