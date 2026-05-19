@@ -10,6 +10,8 @@ from datetime import timedelta
 from tqdm import tqdm
 from dataset import OCTDataset
 import logging
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import config
 

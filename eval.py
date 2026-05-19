@@ -1,6 +1,8 @@
 import os
 import torch
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from PIL import Image
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
