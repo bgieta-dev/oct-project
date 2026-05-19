@@ -56,7 +56,6 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -204,8 +203,6 @@ wandb/
 
 # TensorBoard
 runs/
-tensorboard_logs/
-logs/
 
 # DVC
 .dvc/
@@ -243,9 +240,6 @@ Thumbs.db
 *.swo
 *~
 
-# Log files
-*.log
-logs/
 
 # Backup files
 *.bak

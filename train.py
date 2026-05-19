@@ -102,7 +102,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=5, num_training_steps=epochs)
+    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=epochs)
     
     # Class 0: Background (0.2)
     # Class 1: IRF (5.0) - Hardest
@@ -112,7 +112,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     best_miou = 0.0
-    patience = 15
+    patience = 10
     epochs_no_improve = 0
     start_time = time.time()
     history = {"loss": [], "miou": []}

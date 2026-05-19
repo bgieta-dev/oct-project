@@ -13,7 +13,7 @@ USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Hyperparameters
-LR = 1e-4
+LR = 5e-5
 EPOCHS = 80
 
 # Class Definitions

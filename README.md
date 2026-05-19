@@ -46,12 +46,17 @@ python main.py
 
 ## Experiments
 
-### 2026-05-18 (Current Run)
+### 2026-05-19 (test3 - Current Run)
 **Model:** SegFormer (nvidia/mit-b2)
-**Setup:** `LR=1e-4` with 5-epoch warmup (`get_cosine_schedule_with_warmup`), Early Stopping (15 epochs patience). Evaluation includes `Avg Regions GT/Pred` counting via `scipy.ndimage`. 
-**Status:** Starting training to verify stability and performance improvements.
+**Setup:** `LR=5e-5`, Warmup: 10 epochs, Early Stopping Patience: 10.
+**Rationale:** Previous run (1e-4 with 5-epoch warmup) failed at epoch 27. Lowering base LR and extending warmup to ensure gradient stability in the Transformer encoder.
 
-### 2026-05-17
+### 2026-05-18 (test2 Failed Run)
+**Model:** SegFormer (nvidia/mit-b2)
+**Setup:** `LR=1e-4`, Warmup: 5 epochs.
+**Observations:** Training collapsed at epoch 27 (mIoU dropped to 0.24). 5-epoch warmup was insufficient for the `1e-4` learning rate.
+
+### 2026-05-17 (test1 Failed Run)
 **Model:** SegFormer (nvidia/mit-b2)
 **Results:** Final mIoU: 0.7125, Final mDice: 0.8220
 **Observations:** Training was highly unstable. Around epoch 24, the model collapsed to predicting only background, driving mIoU down to ~0.24. It eventually recovered at epoch 68 as the `CosineAnnealingLR` decayed the learning rate.
