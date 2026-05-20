@@ -13,12 +13,54 @@ import warnings
 from tqdm import tqdm
 from medpy.metric.binary import hd95, asd
 from scipy import ndimage
+import cv2
 from dataset import OCTDataset
 import logging
 import config
 from utils import get_stratified_splits
 
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
+
+class BoundaryPrecisionAnalyzer:
+    """
+    Analyzes boundary precision for fluid segmentation masks.
+    Methodology: Anderson et al. 2023.
+    """
+    def extract_boundaries(self, mask):
+        mask = (mask > 0).astype(np.uint8)
+        kernel = np.ones((3, 3), np.uint8)
+        dilated = cv2.dilate(mask, kernel, iterations=1)
+        outer_boundary = dilated - mask
+        eroded = cv2.erode(mask, kernel, iterations=1)
+        inner_boundary = mask - eroded
+        return outer_boundary, inner_boundary
+
+    def calculate_metrics(self, image, mask):
+        # image expected as 0-1 float
+        if image.max() > 1.0:
+            image = image.astype(np.float32) / 255.0
+        
+        # If multi-channel, use only the first channel (original OCT)
+        if len(image.shape) == 3:
+            image = image[:, :, 0]
+
+        # Filter out very small regions (noise) before precision check
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+        clean_mask = np.zeros_like(mask, dtype=np.uint8)
+        for label in range(1, num_labels):
+            if stats[label, cv2.CC_STAT_AREA] >= 10:
+                clean_mask[labels == label] = 1
+        
+        if not np.any(clean_mask):
+            return 0.0
+
+        outer_b, inner_b = self.extract_boundaries(clean_mask)
+        outer_intensities = image[outer_b == 1]
+        inner_intensities = image[inner_b == 1]
+        
+        if len(outer_intensities) > 0 and len(inner_intensities) > 0:
+            return float(np.mean(outer_intensities) - np.mean(inner_intensities))
+        return 0.0
 
 def evaluate_model(model_path="best_model.pth", output_dir="."):
     all_files = sorted(os.listdir(config.IMG_DIR))
@@ -78,6 +120,10 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     class_asd_vals = {1: [], 2: [], 3: []}
     class_region_counts_gt = {1: [], 2: [], 3: []}
     class_region_counts_pred = {1: [], 2: [], 3: []}
+    class_boundary_diffs = {1: [], 2: [], 3: []} # Teacher's metric
+    class_pixel_areas_gt = {1: [], 2: [], 3: []} # Teacher's metric
+    
+    boundary_analyzer = BoundaryPrecisionAnalyzer()
     image_ious = [] # Track per-image IoU for failure analysis
 
     global_idx = 0
@@ -118,6 +164,11 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 pred_c = (pred == c)
                 
                 if np.any(gt_c):
+                    # Area and Boundary Precision (Teacher's requirements)
+                    class_pixel_areas_gt[c].append(int(np.sum(gt_c)))
+                    diff = boundary_analyzer.calculate_metrics(orig_img, gt_c)
+                    class_boundary_diffs[c].append(diff)
+
                     try:
                         _, gt_num = ndimage.label(gt_c)
                         class_region_counts_gt[c].append(gt_num)
@@ -145,13 +196,23 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 minlength=config.NUM_LABELS**2
             ).reshape(config.NUM_LABELS, config.NUM_LABELS)
 
-            # Per-image mIoU for failure analysis
+            # Per-image mIoU for failure analysis (only consider classes present in GT or Pred)
             img_cm = np.bincount(config.NUM_LABELS * label_flat + pred_flat, minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             img_tp = np.diag(img_cm)
             img_fp = img_cm.sum(axis=0) - img_tp
             img_fn = img_cm.sum(axis=1) - img_tp
+            
+            # Intersection over Union for each class
             img_iou_vals = img_tp / (img_tp + img_fp + img_fn + 1e-6)
-            fluid_miou = np.mean(img_iou_vals[1:]) # mIoU of fluid classes
+            
+            # Find classes that should have been there (GT > 0) or were wrongly predicted (FP > 0)
+            relevant_classes = [c for c in range(1, config.NUM_LABELS) if (img_cm[c, :].sum() > 0 or img_cm[:, c].sum() > 0)]
+            
+            if relevant_classes:
+                fluid_miou = np.mean(img_iou_vals[relevant_classes])
+            else:
+                fluid_miou = 1.0 # Perfect score for background-only slice correctly predicted
+            
             image_ious.append((fluid_miou, global_idx - 1, orig_img, labels, pred))
 
             # Visualization for fixed class-specific indices
@@ -159,8 +220,8 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 c_id = [k for k, v in vis_indices.items() if v == i][0]
                 pos = list(vis_indices.keys()).index(c_id)
                 plt.subplot(3, 3, pos*3 + 1); plt.imshow(orig_img); plt.title(f"OCT (Best {config.CLASS_NAMES[c_id]})"); plt.axis("off")
-                plt.subplot(3, 3, pos*3 + 2); plt.imshow(labels, cmap="jet"); plt.title(f"GT (px: {class_max_counts[c_id]})"); plt.axis("off")
-                plt.subplot(3, 3, pos*3 + 3); plt.imshow(pred, cmap="jet"); plt.title("Pred"); plt.axis("off")
+                plt.subplot(3, 3, pos*3 + 2); plt.imshow(labels, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1); plt.title(f"GT (px: {class_max_counts[c_id]})"); plt.axis("off")
+                plt.subplot(3, 3, pos*3 + 3); plt.imshow(pred, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1); plt.title("Pred"); plt.axis("off")
 
     vis_path = os.path.join(output_dir, "predictions.png")
     plt.tight_layout()
@@ -175,8 +236,8 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     for rank, (iou, idx, img, gt, pr) in enumerate(image_ious[:5]):
         plt.figure(figsize=(12, 4))
         plt.subplot(1, 3, 1); plt.imshow(img); plt.title(f"Worst {rank+1} (mIoU: {iou:.3f})"); plt.axis("off")
-        plt.subplot(1, 3, 2); plt.imshow(gt, cmap="jet"); plt.title("Ground Truth"); plt.axis("off")
-        plt.subplot(1, 3, 3); plt.imshow(pr, cmap="jet"); plt.title("Prediction"); plt.axis("off")
+        plt.subplot(1, 3, 2); plt.imshow(gt, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1); plt.title("Ground Truth"); plt.axis("off")
+        plt.subplot(1, 3, 3); plt.imshow(pr, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1); plt.title("Prediction"); plt.axis("off")
         plt.tight_layout()
         plt.savefig(os.path.join(failure_dir, f"failure_{rank+1}_idx_{idx}.png"))
         plt.close()
@@ -187,7 +248,11 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     fp = total_cm.sum(axis=0) - tp
     fn = total_cm.sum(axis=1) - tp
     
-    metrics = {"class_ious": {}, "class_dices": {}, "class_hd95": {}, "class_asd": {}, "class_avg_regions_gt": {}, "class_avg_regions_pred": {}}
+    metrics = {
+        "class_ious": {}, "class_dices": {}, "class_hd95": {}, "class_asd": {}, 
+        "class_avg_regions_gt": {}, "class_avg_regions_pred": {},
+        "class_boundary_precision": {}, "class_avg_pixel_area": {}
+    }
     for c in range(config.NUM_LABELS):
         denominator_iou = tp[c] + fp[c] + fn[c]
         iou = tp[c] / denominator_iou if denominator_iou > 0 else 1.0
@@ -203,6 +268,8 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             metrics["class_asd"][c] = float(np.mean(class_asd_vals[c])) if class_asd_vals[c] else 50.0
             metrics["class_avg_regions_gt"][c] = float(np.mean(class_region_counts_gt[c])) if class_region_counts_gt[c] else 0.0
             metrics["class_avg_regions_pred"][c] = float(np.mean(class_region_counts_pred[c])) if class_region_counts_pred[c] else 0.0
+            metrics["class_boundary_precision"][c] = float(np.mean(class_boundary_diffs[c])) if class_boundary_diffs[c] else 0.0
+            metrics["class_avg_pixel_area"][c] = float(np.mean(class_pixel_areas_gt[c])) if class_pixel_areas_gt[c] else 0.0
     
     metrics["mIoU"] = float(np.mean(list(metrics["class_ious"].values())))
     metrics["mDice"] = float(np.mean(list(metrics["class_dices"].values())))

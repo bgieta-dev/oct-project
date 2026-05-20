@@ -91,7 +91,10 @@ def main():
         hd = metrics['class_hd95'][c]
         avg_reg_gt = metrics['class_avg_regions_gt'][c]
         avg_reg_pred = metrics['class_avg_regions_pred'][c]
-        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | Avg Regions GT: {avg_reg_gt:.1f} | Avg Regions Pred: {avg_reg_pred:.1f}")
+        bp = metrics['class_boundary_precision'][c]
+        area = metrics['class_avg_pixel_area'][c]
+        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f}")
+        logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
 
     # archiving project docs and scripts
     for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt"]:

@@ -7,32 +7,42 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
 - **IRF**: Intraretinal Fluid (cysts within layers).
 - **SRF**: Subretinal Fluid (detachment under retina).
 - **PED**: Pigment Epithelium Detachment (RPE lift).
-
 ## Key Features
-- **Architecture**: SegFormer (B0-B3 backbones) with MiT encoders.
+- **Architecture**: SegFormer (**B0-B3** backbones) with MiT encoders.
 - **Preprocessing**: 
   - Clinical Intensity Normalization (1-99 percentile clipping).
   - Heavy Augmentation: Rotate, GaussNoise, RandomResizedCrop (Albumentations 2.0).
 - **Input Strategy**: Multi-modal stack (3 channels: Original + Denoised + Edge map).
 - **Optimization**:
   - Hybrid Loss: $0.5 \cdot FocalLoss + 0.5 \cdot DiceLoss$.
-  - Gradient Accumulation: Simulated batch size 16 for RTX 3060/4060 stability.
-- **Evaluation**: 
-  - Stratified 80/10/10 Split (by OCT device: Cirrus, Spectralis, Topcon).
-  - Metrics: Dice, IoU, **HD95** (Hausdorff Distance), **ASD** (Average Surface Distance).
-  - Class-specific fixed visualization for static reporting.
+  - **Dynamic Class Weighting**: Automatically balances fluid vs. background classes.
+  - Gradient Accumulation: Simulated batch size 16 for stability.
+- **Evaluation** (Enhanced per Teacher Guidelines):
+  - **Boundary Precision**: Intensity difference between outer and inner boundaries (Anderson et al. 2023).
+  - **Cyst/Region Analysis**: Connected-component counting and pixel area tracking.
+  - **Noise Filtering**: 10-pixel minimum threshold for structural metrics.
+  - Stratified 80/10/10 Split (by device: Cirrus, Spectralis, Topcon).
+  - Metrics: Dice, IoU, HD95, ASD, BP, Fluid Area.
 
 ## Project Structure
-- `config.py`: Central source of truth for all parameters.
+- `config.py`: Central source of truth (Environment support via `.env`).
 - `train.py`: Training loop with gradient accumulation and weighted loss.
-- `eval.py`: Quantitative and qualitative evaluation on the test set.
+- `eval.py`: Quantitative (Dice, IoU, BP) and qualitative (Failure Analysis) evaluation.
 - `main.py`: Pipeline entry point (Train -> Eval -> Archive).
 - `dataset.py`: Patient-aware OCT loader with percentile normalization.
 
-## Requirements
-```bash
-pip install torch transformers albumentations scikit-learn matplotlib tqdm medpy SimpleITK
-```
+---
+
+## Experiments
+
+### 2026-05-20 (test5 - Transition to B3)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Setup:** `LR=5e-5`, Warmup: 10, Batch: 2, Accum: 16.
+**Objective:** Leverage higher model capacity (B3) to improve IRF segmentation (current bottleneck).
+**Pipeline Upgrades:** Integrated Boundary Precision (BP) and cyst area tracking into `eval.py`.
+
+### 2026-05-20 (test4)
+
 
 ## Usage
 1. Configure settings in `config.py` (e.g., set `MODEL_NAME = "nvidia/mit-b2"`).
@@ -45,6 +55,12 @@ python main.py
 ---
 
 ## Experiments
+
+### 2026-05-20 (test4)
+**Model:** SegFormer (nvidia/mit-b2)
+**Results:** Final mIoU: 0.7322, Final mDice: 0.8378, mHD95: 72.45, mASD: 22.62
+**Setup:** Same as test3 (`LR=5e-5`, Warmup: 10) but with **Dynamic Class Weighting** enabled.
+**Observations:** Best results so far. Significant IoU improvement in SRF (0.69) and PED (0.66) compared to test3. IRF remains stable at 0.60 IoU. The model is now much more robust against the background class dominance.
 
 ### 2026-05-19 (test3)
 **Model:** SegFormer (nvidia/mit-b2)

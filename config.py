@@ -10,7 +10,7 @@ IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
 # Model Configuration
-MODEL_NAME = "nvidia/mit-b2" # nvidia/mit-b0, nvidia/mit-b1, nvidia/mit-b2, nvidia/mit-b3
+MODEL_NAME = "nvidia/mit-b3" # nvidia/mit-b0, nvidia/mit-b1, nvidia/mit-b2, nvidia/mit-b3
 NUM_LABELS = 4
 USE_MULTIMODAL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
