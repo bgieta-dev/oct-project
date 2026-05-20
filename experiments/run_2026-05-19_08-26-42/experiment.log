@@ -1,0 +1,18 @@
+2026-05-19 08:26:42,450 | INFO     | root:main:48 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-19_08-26-42
+2026-05-19 08:26:42,452 | INFO     | root:main:51 - Device: NVIDIA GeForce RTX 3060
+2026-05-19 08:26:42,452 | INFO     | root:main:53 - GPU Memory: 12.00 GB
+2026-05-19 08:26:42,453 | INFO     | root:main:57 - --- TRAINING ---
+2026-05-19 08:26:42,468 | INFO     | root:train_model:70 - Split: Train=56, Val=7, Test=7
+2026-05-19 08:26:42,888 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-19 08:26:44,105 | INFO     | root:train_model:121 - Starting training for 80 epochs...
+2026-05-19 08:26:44,106 | INFO     | root:train_model:122 - Config: MODEL_NAME=nvidia/mit-b2, BATCH_SIZE=8, ACCUM_STEPS=4, LR=5e-05, DEVICE=cuda
+2026-05-19 08:37:28,707 | INFO     | root:train_model:187 - Epoch 1 | Loss: 0.5295 | mIoU: 0.0195 | Time: 644s
+2026-05-19 08:37:28,831 | INFO     | root:train_model:192 - New best model saved! (mIoU: 0.0195)
+2026-05-19 08:48:12,391 | INFO     | root:train_model:187 - Epoch 2 | Loss: 0.4724 | mIoU: 0.1421 | Time: 643s
+2026-05-19 08:48:12,515 | INFO     | root:train_model:192 - New best model saved! (mIoU: 0.1421)
+2026-05-19 08:58:55,803 | INFO     | root:train_model:187 - Epoch 3 | Loss: 0.4006 | mIoU: 0.3222 | Time: 643s
+2026-05-19 08:58:55,932 | INFO     | root:train_model:192 - New best model saved! (mIoU: 0.3222)
+2026-05-19 09:09:40,565 | INFO     | root:train_model:187 - Epoch 4 | Loss: 0.3294 | mIoU: 0.4932 | Time: 644s
+2026-05-19 09:09:40,703 | INFO     | root:train_model:192 - New best model saved! (mIoU: 0.4932)
+2026-05-19 09:20:24,757 | INFO     | root:train_model:187 - Epoch 5 | Loss: 0.2559 | mIoU: 0.6150 | Time: 643s
+2026-05-19 09:20:24,891 | INFO     | root:train_model:192 - New best model saved! (mIoU: 0.6150)

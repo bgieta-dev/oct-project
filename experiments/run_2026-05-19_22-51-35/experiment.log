@@ -1,0 +1,16 @@
+2026-05-19 22:51:35,579 | INFO     | root:main:60 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-19_22-51-35
+2026-05-19 22:51:35,582 | INFO     | root:main:63 - Device: NVIDIA GeForce RTX 3060
+2026-05-19 22:51:35,582 | INFO     | root:main:65 - GPU Memory: 12.00 GB
+2026-05-19 22:51:35,582 | INFO     | root:main:69 - --- TRAINING ---
+2026-05-19 22:51:35,601 | INFO     | root:train_model:64 - Split: Train=56, Val=7, Test=7
+2026-05-19 22:51:35,670 | INFO     | root:calculate_dynamic_weights:43 - Calculating dynamic class weights...
+2026-05-19 22:51:40,883 | INFO     | root:train_model:81 - Dynamic weights: [0.00921245 1.03819163 1.54269683 1.40989909]
+2026-05-19 22:51:40,953 | WARNING  | py.warnings:_showwarnmsg:109 - C:\Users\Student\Documents\python\oct-project\train.py:90: UserWarning: Argument(s) 'alpha_affine' are not valid for transform ElasticTransform
+  A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
+
+2026-05-19 22:51:43,109 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-19 22:51:43,550 | WARNING  | py.warnings:_showwarnmsg:109 - C:\Users\Student\Documents\python\oct-project\train.py:118: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler(enabled=config.USE_AMP)
+
+2026-05-19 22:51:43,551 | INFO     | root:train_model:126 - Starting training for 80 epochs...
+2026-05-19 22:51:43,551 | INFO     | root:train_model:127 - Config: MODEL_NAME=nvidia/mit-b2, BATCH_SIZE=8, ACCUM_STEPS=4, LR=5e-05, DEVICE=cuda, AMP=True
