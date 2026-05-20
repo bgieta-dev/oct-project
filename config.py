@@ -46,7 +46,8 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 def get_vram_config(model_name: str):
     """Auto-adjust for VRAM safety (target effective batch 32)"""
     if "b3" in model_name:
-        return {"batch_size": 2, "accum_steps": 16}
+        # Aggressive for 12GB VRAM (Requires clearing background processes!)
+        return {"batch_size": 8, "accum_steps": 4}
     elif "b2" in model_name:
         return {"batch_size": 8, "accum_steps": 4}
     elif "b1" in model_name:
