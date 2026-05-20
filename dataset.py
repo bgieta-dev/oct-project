@@ -44,10 +44,15 @@ class OCTDataset(Dataset):
                 neighbor_idx = curr_idx + offset
                 neighbor_path = os.path.join(dir_path, f"{prefix}_{neighbor_idx:03d}.{ext}")
                 if os.path.exists(neighbor_path):
-                    return np.array(Image.open(neighbor_path).convert("L"))
+                    img = Image.open(neighbor_path).convert("L")
+                    # Force same size as t_0 in case raw files differ
+                    if img.size != t_0_pil.size:
+                        img = img.resize(t_0_pil.size, Image.BILINEAR)
+                    return np.array(img)
                 return None
 
-            t_0 = np.array(Image.open(img_path).convert("L"))
+            t_0_pil = Image.open(img_path).convert("L")
+            t_0 = np.array(t_0_pil)
             t_minus = load_slice(-1)
             t_plus = load_slice(1)
             
