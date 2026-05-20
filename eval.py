@@ -151,6 +151,20 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
             preds_batch = logits.argmax(dim=1).cpu().numpy()
 
+            # Apply Morphological Cleaning (Remove small regions)
+            if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+                cleaned_preds = []
+                for p in preds_batch:
+                    new_p = np.zeros_like(p)
+                    for c in range(1, config.NUM_LABELS):
+                        c_mask = (p == c).astype(np.uint8)
+                        num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
+                        for label in range(1, num_labels):
+                            if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                                new_p[labels_im == label] = c
+                    cleaned_preds.append(new_p)
+                preds_batch = np.array(cleaned_preds)
+
         for b_idx in range(len(preds_batch)):
             labels = labels_batch[b_idx]
             pred = preds_batch[b_idx]

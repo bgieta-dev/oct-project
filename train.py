@@ -137,7 +137,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             pixel_values = batch["pixel_values"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
             
-            with torch.cuda.amp.autocast(enabled=config.USE_AMP):
+            with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = torch.nn.functional.interpolate(
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
@@ -168,16 +168,31 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 for batch in val_loader:
                     pixel_values = batch["pixel_values"].to(config.DEVICE)
                     labels = batch["labels"].to(config.DEVICE)
-                    with torch.cuda.amp.autocast(enabled=config.USE_AMP):
+                    with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                         outputs = model(pixel_values=pixel_values)
                     logits = torch.nn.functional.interpolate(
                         outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                     )
-                    preds = logits.argmax(dim=1)
+                    preds = logits.argmax(dim=1).cpu().numpy()
                     
-                    mask = (labels >= 0) & (labels < config.NUM_LABELS)
-                    label_flat = labels[mask].cpu().numpy().astype(np.int64)
-                    pred_flat = preds[mask].cpu().numpy().astype(np.int64)
+                    # Morphological cleaning for validation metrics
+                    if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+                        import cv2
+                        cleaned_preds = []
+                        for p in preds:
+                            new_p = np.zeros_like(p)
+                            for c in range(1, config.NUM_LABELS):
+                                c_mask = (p == c).astype(np.uint8)
+                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
+                                for label in range(1, num_labels):
+                                    if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                                        new_p[labels_im == label] = c
+                            cleaned_preds.append(new_p)
+                        preds = np.array(cleaned_preds)
+
+                    mask = (labels.cpu().numpy() >= 0) & (labels.cpu().numpy() < config.NUM_LABELS)
+                    label_flat = labels.cpu().numpy()[mask].astype(np.int64)
+                    pred_flat = preds[mask].astype(np.int64)
                     total_cm += np.bincount(
                         config.NUM_LABELS * label_flat + pred_flat,
                         minlength=config.NUM_LABELS**2

@@ -30,7 +30,32 @@ class OCTDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         img_path = self.image_paths[idx]
         
-        if self.use_multimodal:
+        if getattr(config, "USE_25D", False):
+            # 2.5D logic: load t-1, t, t+1
+            dir_path = os.path.dirname(img_path)
+            base_name = os.path.basename(img_path)
+            prefix = "_".join(base_name.split("_")[:-1])
+            idx_str = base_name.split("_")[-1].split(".")[0]
+            curr_idx = int(idx_str)
+            ext = base_name.split(".")[-1]
+
+            def load_slice(offset):
+                neighbor_idx = curr_idx + offset
+                neighbor_path = os.path.join(dir_path, f"{prefix}_{neighbor_idx:03d}.{ext}")
+                if os.path.exists(neighbor_path):
+                    return np.array(Image.open(neighbor_path).convert("L"))
+                return None
+
+            t_0 = np.array(Image.open(img_path).convert("L"))
+            t_minus = load_slice(-1)
+            t_plus = load_slice(1)
+            
+            # Use current slice as padding if neighbor is missing
+            t_minus = t_minus if t_minus is not None else t_0
+            t_plus = t_plus if t_plus is not None else t_0
+            
+            image = np.stack([t_minus, t_0, t_plus], axis=-1)
+        elif self.use_multimodal:
             denoised_path = img_path.replace("cropped_images", "denoised_images")
             edge_path = img_path.replace("cropped_images", "edge_map_images")
             

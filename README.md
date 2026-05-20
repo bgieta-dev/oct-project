@@ -56,6 +56,13 @@ python main.py
 
 ## Experiments
 
+### 2026-05-20 (test5)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Results:** Final mIoU: 0.6897, Final mDice: 0.8047, mHD95: 74.25
+**Setup:** `LR=5e-5`, Warmup: 10, Batch: 8, Accum: 4.
+**Observations:** Paradoxical results. Training mIoU reached **0.7880** (best ever), but validation/test mIoU dropped significantly compared to test4 (B2). This indicates **heavy overfitting** or a mismatch in how the B3 model handles the stratified test set. PED IoU dropped to 0.51, suggesting B3 might be too sensitive to noise or requires stronger regularization.
+**New Metrics:** First run with **Boundary Precision (BP)** and **Fluid Area** metrics. Average BP was ~0.04 across classes.
+
 ### 2026-05-20 (test4)
 **Model:** SegFormer (nvidia/mit-b2)
 **Results:** Final mIoU: 0.7322, Final mDice: 0.8378, mHD95: 72.45, mASD: 22.62

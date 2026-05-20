@@ -13,6 +13,7 @@ MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 MODEL_NAME = "nvidia/mit-b3" # nvidia/mit-b0, nvidia/mit-b1, nvidia/mit-b2, nvidia/mit-b3
 NUM_LABELS = 4
 USE_MULTIMODAL = True
+USE_25D = True # Stack adjacent slices (t-1, t, t+1)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Hyperparameters
@@ -22,6 +23,9 @@ OPTIMIZER_TYPE = "AdamW" # AdamW, SGD
 USE_AMP = True # Mixed Precision Training
 VAL_INTERVAL = 1 # Validate every N epochs
 USE_DYNAMIC_WEIGHTS = True # Calculate weights from training set
+
+# Post-processing
+MIN_REGION_SIZE = 50 # Minimum pixels for a predicted region to be kept
 
 # Class Definitions
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
@@ -45,8 +49,9 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 def get_vram_config(model_name: str):
     """Auto-adjust for VRAM safety (target effective batch 32)"""
-    if "b3" in model_name:
-        # Aggressive for 12GB VRAM (Requires clearing background processes!)
+    if "b4" in model_name:
+        return {"batch_size": 4, "accum_steps": 8}
+    elif "b3" in model_name:
         return {"batch_size": 8, "accum_steps": 4}
     elif "b2" in model_name:
         return {"batch_size": 8, "accum_steps": 4}
