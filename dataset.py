@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from typing import List, Dict, Any
+import config
 
 class OCTDataset(Dataset):
     """
