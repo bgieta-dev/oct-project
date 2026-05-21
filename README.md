@@ -12,7 +12,7 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
 - **Preprocessing**: 
   - Clinical Intensity Normalization (1-99 percentile clipping).
   - Heavy Augmentation: Rotate, GaussNoise, RandomResizedCrop (Albumentations 2.0).
-- **Input Strategy**: Multi-modal stack (3 channels: Original + Denoised + Edge map).
+- **Input Strategy**: **2.5D Context** (3-channel stack of adjacent slices: $t-1, t, t+1$).
 - **Optimization**:
   - Hybrid Loss: $0.5 \cdot FocalLoss + 0.5 \cdot DiceLoss$.
   - **Dynamic Class Weighting**: Automatically balances fluid vs. background classes.
@@ -20,29 +20,18 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
 - **Evaluation** (Enhanced per Teacher Guidelines):
   - **Boundary Precision**: Intensity difference between outer and inner boundaries (Anderson et al. 2023).
   - **Cyst/Region Analysis**: Connected-component counting and pixel area tracking.
-  - **Noise Filtering**: 10-pixel minimum threshold for structural metrics.
+  - **Morphological Cleaning**: Automated removal of noisy regions < 50px.
   - Stratified 80/10/10 Split (by device: Cirrus, Spectralis, Topcon).
   - Metrics: Dice, IoU, HD95, ASD, BP, Fluid Area.
 
 ## Project Structure
 - `config.py`: Central source of truth (Environment support via `.env`).
-- `train.py`: Training loop with gradient accumulation and weighted loss.
-- `eval.py`: Quantitative (Dice, IoU, BP) and qualitative (Failure Analysis) evaluation.
+- `train.py`: Training loop with 2.5D support and mixed precision.
+- `eval.py`: Quantitative (Dice, IoU, BP) and qualitative (Failure Analysis) evaluation with prediction cleaning.
 - `main.py`: Pipeline entry point (Train -> Eval -> Archive).
-- `dataset.py`: Patient-aware OCT loader with percentile normalization.
+- `dataset.py`: 2.5D Patient-aware OCT loader with percentile normalization.
 
 ---
-
-## Experiments
-
-### 2026-05-20 (test5 - Transition to B3)
-**Model:** SegFormer (**nvidia/mit-b3**)
-**Setup:** `LR=5e-5`, Warmup: 10, Batch: 2, Accum: 16.
-**Objective:** Leverage higher model capacity (B3) to improve IRF segmentation (current bottleneck).
-**Pipeline Upgrades:** Integrated Boundary Precision (BP) and cyst area tracking into `eval.py`.
-
-### 2026-05-20 (test4)
-
 
 ## Usage
 1. Configure settings in `config.py` (e.g., set `MODEL_NAME = "nvidia/mit-b2"`).
@@ -55,6 +44,21 @@ python main.py
 ---
 
 ## Experiments
+
+### 2026-05-21 (test7 - Regularization & Multi-Scale)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Setup:** `LR=5e-5`, **Dropout (0.1)**, **Focal Gamma (3.0)**, **Weight Decay (5e-2)**.
+**Objective:** Solve the B3 overfitting crisis. 
+**Pipeline Upgrades:**
+- **Spatial Regularization:** Added hidden/attention/classifier dropout.
+- **Advanced TTA:** Implemented Multi-Scale (0.8x, 1.0x, 1.2x) + Flip inference.
+- **Loss Tuning:** Increased Focal Gamma to force focus on difficult PED structures.
+
+### 2026-05-21 (test6)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Results:** Final mIoU: 0.6850, Final mDice: 0.7987, mHD95: 71.66
+**Setup:** **2.5D Input Stacking**, `LR=5e-5`, **Morphological Cleaning (50px)**.
+**Observations:** Mixed results. **SRF (Class 2)** reached its highest IoU yet (**0.7123**), proving the value of 2.5D context. However, **PED (Class 3)** continues to struggle (0.46), and the model exhibits significant overfitting. The 2.5D logic improved vertical consistency but didn't solve the B3 backbone's tendency to memorize noise.
 
 ### 2026-05-20 (test5)
 **Model:** SegFormer (**nvidia/mit-b3**)

@@ -103,20 +103,25 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=4, pin_memory=True)
 
     model = SegformerForSemanticSegmentation.from_pretrained(
-        config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True
+        config.MODEL_NAME, 
+        num_labels=config.NUM_LABELS, 
+        ignore_mismatched_sizes=True,
+        hidden_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
+        attention_probs_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
+        classifier_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0)
     ).to(config.DEVICE)
 
     if config.OPTIMIZER_TYPE == "AdamW":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
     elif config.OPTIMIZER_TYPE == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=config.LR, momentum=0.9)
+        optimizer = torch.optim.SGD(model.parameters(), lr=config.LR, momentum=0.9, weight_decay=5e-2)
     else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
         
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=epochs)
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
-    focal_criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+    focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
 
     best_miou = 0.0
     patience = 10

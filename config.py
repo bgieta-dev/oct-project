@@ -23,6 +23,8 @@ OPTIMIZER_TYPE = "AdamW" # AdamW, SGD
 USE_AMP = True # Mixed Precision Training
 VAL_INTERVAL = 1 # Validate every N epochs
 USE_DYNAMIC_WEIGHTS = True # Calculate weights from training set
+FOCAL_GAMMA = 3.0 # Focus on hard examples (higher = harder)
+DROPOUT_RATE = 0.1 # Generalization
 
 # Post-processing
 MIN_REGION_SIZE = 50 # Minimum pixels for a predicted region to be kept
@@ -33,6 +35,7 @@ CLASS_WEIGHTS = [0.2, 5.0, 2.0, 2.0] # Fallback weights
 
 # Evaluation
 USE_TTA = True # Test-Time Augmentation
+TTA_SCALES = [0.8, 1.0, 1.2] # Multi-scale inference
 
 # Augmentation Settings
 AUG_SIZE = (512, 512)

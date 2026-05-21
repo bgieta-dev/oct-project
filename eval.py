@@ -139,15 +139,38 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             )
             
             if config.USE_TTA:
-                # TTA: Horizontal Flip
-                flipped_pixels = torch.flip(pixel_values, [3])
-                flipped_outputs = model(pixel_values=flipped_pixels)
-                flipped_logits = torch.nn.functional.interpolate(
-                    flipped_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-                )
-                # Unflip and average
-                unflipped_logits = torch.flip(flipped_logits, [3])
-                logits = (logits + unflipped_logits) / 2.0
+                scales = getattr(config, "TTA_SCALES", [1.0])
+                all_logits = []
+                
+                for s in scales:
+                    # Rescale input
+                    if s != 1.0:
+                        scaled_size = (int(512 * s), int(512 * s))
+                        scaled_pixels = torch.nn.functional.interpolate(
+                            pixel_values, size=scaled_size, mode="bilinear", align_corners=False
+                        )
+                    else:
+                        scaled_pixels = pixel_values
+                    
+                    # Original pass at this scale
+                    s_outputs = model(pixel_values=scaled_pixels)
+                    s_logits = torch.nn.functional.interpolate(
+                        s_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
+                    )
+                    all_logits.append(s_logits)
+                    
+                    # Flipped pass at this scale
+                    f_pixels = torch.flip(scaled_pixels, [3])
+                    f_outputs = model(pixel_values=f_pixels)
+                    f_logits = torch.nn.functional.interpolate(
+                        f_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
+                    )
+                    # Unflip
+                    uf_logits = torch.flip(f_logits, [3])
+                    all_logits.append(uf_logits)
+                
+                # Average all TTA passes
+                logits = torch.mean(torch.stack(all_logits), dim=0)
 
             preds_batch = logits.argmax(dim=1).cpu().numpy()
 
