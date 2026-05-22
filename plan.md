@@ -16,8 +16,8 @@ Goal: Optimize transformers. Systemic clinical comparison.
 - [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`).
 - [x] **VRAM Optimization (RTX 4060/3060):**
     - Dynamic `batch_size` based on model size.
-    - **Gradient Accumulation** (Effective batch size = 16) for stability.
-- [ ] Move to **SegFormer-B3** for final comparison.
+    - **Gradient Accumulation** (Effective batch size = 32) for stability.
+- [x] Move to **SegFormer-B3** for final comparison (Test 7).
 - [ ] Implement **Attention Maps** visualization.
 
 #### 2. Advanced Preprocessing & Data
@@ -51,3 +51,17 @@ Goal: Optimize transformers. Systemic clinical comparison.
 - [x] Add log
 - [x] Test B2 model
 - [x] Add HD95/ASD to main.py logging.
+
+---
+
+## Log / Diary
+
+### 22.05.2025: Test 8 Implementation (B2 Base)
+- **Objective**: Improve PED boundary precision and IRF recall using Tversky Loss and CLAHE.
+- **Changes**:
+    - Switched model to **nvidia/mit-b2** to isolate impact.
+    - Switched Dice Loss to **Tversky Loss** (alpha=0.3, beta=0.7) to penalize False Negatives.
+    - Added **CLAHE** to the preprocessing pipeline for edge salience.
+    - Strengthened **ElasticTransform** to fight overfitting.
+    - Increased morphological cleaning to **100px**.
+- **Status**: Ready to run.

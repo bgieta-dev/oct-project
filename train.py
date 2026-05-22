@@ -30,6 +30,25 @@ class FocalLoss(torch.nn.Module):
         elif self.reduction == 'sum': return focal_loss.sum()
         else: return focal_loss
 
+class TverskyLoss(torch.nn.Module):
+    def __init__(self, alpha=0.3, beta=0.7, num_classes=config.NUM_LABELS):
+        super(TverskyLoss, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.num_classes = num_classes
+
+    def forward(self, pred, target):
+        pred = torch.softmax(pred, dim=1)
+        target_one_hot = torch.nn.functional.one_hot(target, self.num_classes).permute(0, 3, 1, 2).float()
+        
+        dims = (0, 2, 3)
+        tp = torch.sum(pred * target_one_hot, dims)
+        fp = torch.sum(pred * (1 - target_one_hot), dims)
+        fn = torch.sum((1 - pred) * target_one_hot, dims)
+        
+        tversky = (tp + 1e-6) / (tp + self.alpha * fp + self.beta * fn + 1e-6)
+        return 1 - tversky.mean()
+
 def dice_loss(pred, target, num_classes=config.NUM_LABELS):
     pred = torch.softmax(pred, dim=1)
     target_one_hot = torch.nn.functional.one_hot(target, num_classes).permute(0, 3, 1, 2).float()
@@ -83,15 +102,27 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     else:
         class_weights = torch.tensor(config.CLASS_WEIGHTS).to(config.DEVICE)
 
-    train_transform = A.Compose([
+    # Augmentation Setup
+    aug_list = []
+    if getattr(config, "USE_CLAHE", False):
+        aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=0.5))
+    
+    aug_list.extend([
         A.RandomResizedCrop(size=config.AUG_SIZE, scale=config.AUG_SCALE, p=1.0),
         A.HorizontalFlip(p=config.AUG_PROBS["flip"]),
         A.Rotate(limit=10, p=config.AUG_PROBS["rotate"]),
-        A.ElasticTransform(alpha=1, sigma=50, p=0.2),
+        A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.3),
         A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
         A.GaussNoise(std_range=(0.02, 0.1), p=config.AUG_PROBS["noise"]),
     ])
-    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
+    
+    train_transform = A.Compose(aug_list)
+    
+    val_aug_list = []
+    if getattr(config, "USE_CLAHE", False):
+        val_aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=1.0))
+    val_aug_list.append(A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1]))
+    val_transform = A.Compose(val_aug_list)
 
     processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
     processor.do_reduce_labels = False
@@ -122,6 +153,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
+    tversky_criterion = TverskyLoss(alpha=0.3, beta=0.7)
 
     best_miou = 0.0
     patience = 10
@@ -129,7 +161,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     start_time = time.time()
     history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
-    logging.info(f"Config: MODEL_NAME={config.MODEL_NAME}, BATCH_SIZE={config.BATCH_SIZE}, ACCUM_STEPS={config.ACCUMULATION_STEPS}, LR={config.LR}, DEVICE={config.DEVICE}, AMP={config.USE_AMP}")
+    logging.info(f"Config: MODEL_NAME={config.MODEL_NAME}, BATCH_SIZE={config.BATCH_SIZE}, ACCUM_STEPS={config.ACCUMULATION_STEPS}, LR={config.LR}, DEVICE={config.DEVICE}, AMP={config.USE_AMP}, Tversky={getattr(config, 'USE_TVERSKY', False)}, CLAHE={getattr(config, 'USE_CLAHE', False)}")
 
     for epoch in range(epochs):
         epoch_start = time.time()
@@ -147,7 +179,14 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 logits = torch.nn.functional.interpolate(
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
-                loss = (0.5 * focal_criterion(logits, labels) + 0.5 * dice_loss(logits, labels)) / config.ACCUMULATION_STEPS
+                
+                main_loss = 0.5 * focal_criterion(logits, labels)
+                if getattr(config, "USE_TVERSKY", False):
+                    aux_loss = 0.5 * tversky_criterion(logits, labels)
+                else:
+                    aux_loss = 0.5 * dice_loss(logits, labels)
+                
+                loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             
             scaler.scale(loss).backward()
             

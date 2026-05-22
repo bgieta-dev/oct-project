@@ -10,7 +10,7 @@ IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
 # Model Configuration
-MODEL_NAME = "nvidia/mit-b3" # nvidia/mit-b0, nvidia/mit-b1, nvidia/mit-b2, nvidia/mit-b3
+MODEL_NAME = "nvidia/mit-b2" # nvidia/mit-b0, nvidia/mit-b1, nvidia/mit-b2, nvidia/mit-b3
 NUM_LABELS = 4
 USE_MULTIMODAL = True
 USE_25D = True # Stack adjacent slices (t-1, t, t+1)
@@ -23,11 +23,13 @@ OPTIMIZER_TYPE = "AdamW" # AdamW, SGD
 USE_AMP = True # Mixed Precision Training
 VAL_INTERVAL = 1 # Validate every N epochs
 USE_DYNAMIC_WEIGHTS = True # Calculate weights from training set
-FOCAL_GAMMA = 3.0 # Focus on hard examples (higher = harder)
+USE_TVERSKY = True # Use Tversky Loss instead of Dice Loss
+USE_CLAHE = True # Use CLAHE for contrast enhancement
+FOCAL_GAMMA = 2.0 # Standard Focal Gamma
 DROPOUT_RATE = 0.1 # Generalization
 
 # Post-processing
-MIN_REGION_SIZE = 50 # Minimum pixels for a predicted region to be kept
+MIN_REGION_SIZE = 100 # Increased morphological cleaning
 
 # Class Definitions
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}

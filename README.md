@@ -45,14 +45,26 @@ python main.py
 
 ## Experiments
 
-### 2026-05-21 (test7 - Regularization & Multi-Scale)
+### 2026-05-22 (test8 - Recall Optimization & Edge Salience)
+**Model:** SegFormer (**nvidia/mit-b2**)
+**Setup:** `LR=5e-5`, **Tversky Loss** ($\alpha=0.3, \beta=0.7$), **CLAHE (p=0.5)**, **ElasticTransform (p=0.3)**.
+**Objective:** Ablation study on loss and preprocessing. Improve PED boundary precision and IRF recall.
+**Key Changes:**
+- **Loss Refinement:** Replaced Dice with Tversky Loss to prioritize catching small/thin fluid regions (minimizing False Negatives).
+- **Contrast Enhancement:** Integrated CLAHE into the input pipeline to sharpen faint clinical boundaries (RPE line).
+- **Robustness:** Strengthened ElasticTransform to force the model to learn anatomical structures rather than pixel noise.
+- **Model Choice:** Reverted to B2 to isolate the impact of these algorithmic changes from the B3 backbone complexity.
+
+### 2026-05-21 (test7)
 **Model:** SegFormer (**nvidia/mit-b3**)
+**Results:** Final mIoU: 0.7080, Final mDice: 0.8189, mHD95: 73.97, mASD: 22.05
 **Setup:** `LR=5e-5`, **Dropout (0.1)**, **Focal Gamma (3.0)**, **Weight Decay (5e-2)**.
-**Objective:** Solve the B3 overfitting crisis. 
-**Pipeline Upgrades:**
-- **Spatial Regularization:** Added hidden/attention/classifier dropout.
-- **Advanced TTA:** Implemented Multi-Scale (0.8x, 1.0x, 1.2x) + Flip inference.
-- **Loss Tuning:** Increased Focal Gamma to force focus on difficult PED structures.
+**Observations:** Modest improvement over test6. **PED (Class 3)** IoU increased to **0.5561**, validating the aggressive Focal Gamma. However, the B3 backbone still underperforms compared to **B2** (test4, mIoU 0.7322).
+**Visual Failure Analysis (from `failures/` folder):**
+- **Disconnected IRF:** Small intraretinal cysts are frequently missed or fragmented, indicating the model needs higher sensitivity for small structures.
+- **PED-SRF Confusion:** In complex detachments, the model struggles to distinguish the RPE line (PED) from the overlying subretinal fluid (SRF) due to overlapping intensity profiles.
+- **Noisy Outliers:** High HD95 is driven by "island" pixels—randomly predicted clusters far from the true anatomy.
+**Conclusion:** B3 is "memorizing" noise (overfitting). Next steps require non-rigid augmentation (Elastic) and a loss function prioritizing recall (Tversky).
 
 ### 2026-05-21 (test6)
 **Model:** SegFormer (**nvidia/mit-b3**)
