@@ -45,6 +45,15 @@ python main.py
 
 ## Experiments
 
+### 2026-05-23 (test9 - Extreme Augmentation & B3 Final Battle)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Objective:** Final attempt to tame the B3 backbone using the most advanced regularization and loss strategies. If B3 cannot beat B2's score (0.7409) here, we pivot to Swin.
+**Pipeline Upgrades:**
+- **Local Deformation:** Introduce `GridDistortion` alongside `ElasticTransform`.
+- **Aggressive Dropout:** Increased to `0.2` to stop B3 from "memorizing" the 56-volume training set.
+- **Loss Tuning (Focal-Tversky):** Combined Focal (background penalty) + Tversky (recall boost).
+- **Learning Rate Schedule:** 15-epoch warmup for stability.
+
 ### 2026-05-22 (test8 - Recall Optimization & Edge Salience)
 **Model:** SegFormer (**nvidia/mit-b2**)
 **Setup:** `LR=5e-5`, **Tversky Loss** ($\alpha=0.3, \beta=0.7$), **CLAHE (p=0.5)**, **ElasticTransform (p=0.3)**.

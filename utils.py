@@ -20,12 +20,12 @@ def get_stratified_splits(all_files: List[str], seed: int = 42) -> Tuple[np.ndar
     patients = np.array(list(patient_to_device.keys()))
     devices = np.array(list(patient_to_device.values()))
     
-    # First split: Train vs (Val + Test)
+    # First split: Train vs (Val + Test) (100 = 80/20)
     train_pts, temp_pts, _, temp_devs = train_test_split(
         patients, devices, test_size=0.20, random_state=seed, stratify=devices
     )
     
-    # Second split: Val vs Test
+    # Second split: Val vs Test (20 = 10/10) 
     val_pts, test_pts = train_test_split(
         temp_pts, test_size=0.50, random_state=seed, stratify=temp_devs
     )

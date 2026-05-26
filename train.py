@@ -14,6 +14,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import config
 from utils import get_stratified_splits
+import torch.nn.functional as F
 
 class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=None, gamma=2, reduction='mean'):
@@ -111,7 +112,10 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         A.RandomResizedCrop(size=config.AUG_SIZE, scale=config.AUG_SCALE, p=1.0),
         A.HorizontalFlip(p=config.AUG_PROBS["flip"]),
         A.Rotate(limit=10, p=config.AUG_PROBS["rotate"]),
-        A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.3),
+        A.OneOf([
+            A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=1.0),
+            A.GridDistortion(num_steps=5, distort_limit=0.3, p=1.0)
+        ], p=0.4),
         A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
         A.GaussNoise(std_range=(0.02, 0.1), p=config.AUG_PROBS["noise"]),
     ])
@@ -142,14 +146,9 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         classifier_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0)
     ).to(config.DEVICE)
 
-    if config.OPTIMIZER_TYPE == "AdamW":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-    elif config.OPTIMIZER_TYPE == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=config.LR, momentum=0.9, weight_decay=5e-2)
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-        
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=epochs)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
+    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 10)
+    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_epochs, num_training_steps=epochs)
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
@@ -161,7 +160,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     start_time = time.time()
     history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
-    logging.info(f"Config: MODEL_NAME={config.MODEL_NAME}, BATCH_SIZE={config.BATCH_SIZE}, ACCUM_STEPS={config.ACCUMULATION_STEPS}, LR={config.LR}, DEVICE={config.DEVICE}, AMP={config.USE_AMP}, Tversky={getattr(config, 'USE_TVERSKY', False)}, CLAHE={getattr(config, 'USE_CLAHE', False)}")
 
     for epoch in range(epochs):
         epoch_start = time.time()
@@ -181,7 +179,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 )
                 
                 main_loss = 0.5 * focal_criterion(logits, labels)
-                if getattr(config, "USE_TVERSKY", False):
+                if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
                     aux_loss = 0.5 * tversky_criterion(logits, labels)
                 else:
                     aux_loss = 0.5 * dice_loss(logits, labels)
@@ -197,11 +195,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             
             epoch_loss += loss.item() * config.ACCUMULATION_STEPS
             pbar.set_postfix({"loss": f"{loss.item() * config.ACCUMULATION_STEPS:.4f}"})
-        
-        if (len(train_loader)) % config.ACCUMULATION_STEPS != 0:
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad()
         
         scheduler.step()
         
@@ -219,7 +212,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     )
                     preds = logits.argmax(dim=1).cpu().numpy()
                     
-                    # Morphological cleaning for validation metrics
                     if getattr(config, "MIN_REGION_SIZE", 0) > 0:
                         import cv2
                         cleaned_preds = []
@@ -228,9 +220,9 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                             for c in range(1, config.NUM_LABELS):
                                 c_mask = (p == c).astype(np.uint8)
                                 num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
-                                for label in range(1, num_labels):
-                                    if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
-                                        new_p[labels_im == label] = c
+                                for lbl in range(1, num_labels):
+                                    if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                                        new_p[labels_im == lbl] = c
                             cleaned_preds.append(new_p)
                         preds = np.array(cleaned_preds)
 
@@ -242,7 +234,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                         minlength=config.NUM_LABELS**2
                     ).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
-            # Calculate mIoU from CM
             tp = np.diag(total_cm)
             fp = total_cm.sum(axis=0) - tp
             fn = total_cm.sum(axis=1) - tp
