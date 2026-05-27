@@ -54,6 +54,16 @@ python main.py
 - **Loss Tuning (Focal-Tversky):** Combined Focal (background penalty) + Tversky (recall boost).
 - **Learning Rate Schedule:** 15-epoch warmup for stability.
 
+### 2026-05-26 (test9 - SegFormer B3 Regression)
+**Model:** SegFormer (**nvidia/mit-b3**)
+**Results:** Final mIoU: 0.6844, Final mDice: 0.8014, mHD95: 80.38, mASD: 25.79
+**Setup:** `LR=5e-5`, Tversky Loss, CLAHE, ElasticTransform.
+**Observations:** **Significant performance drop.** 
+- **Backbone Overshoot:** B3 backbone is consistently underperforming compared to B2 (Test 8: 0.7409). 
+- **Severe SRF Issues:** Class 2 (SRF) HD95 exploded to **114.96**, indicating the model is predicting many small, disconnected "island" pixels far from the true pathology.
+- **PED Regression:** IoU for PED dropped back to **0.52**, suggesting B3 cannot maintain the boundary precision achieved by B2 even with CLAHE.
+**Conclusion:** SegFormer B3 is officially deemed **too complex/unstable** for this specific dataset and task. It memorizes training noise and produces fragmented segmentations. We will **abandon SegFormer expansion** and pivot entirely to **SwinUNETR** for the final comparison.
+
 ### 2026-05-22 (test8 - Recall Optimization & Edge Salience)
 **Model:** SegFormer (**nvidia/mit-b2**)
 **Setup:** `LR=5e-5`, **Tversky Loss** ($\alpha=0.3, \beta=0.7$), **CLAHE (p=0.5)**, **ElasticTransform (p=0.3)**.

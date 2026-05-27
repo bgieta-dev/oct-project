@@ -9,3 +9,5 @@ medpy
 SimpleITK
 scipy
 python-dotenv
+monai
+einops

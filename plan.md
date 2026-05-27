@@ -13,11 +13,12 @@ Goal: Optimize transformers. Systemic clinical comparison.
 
 #### 1. Model Upgrade & Stability
 - [x] Centralize config in `config.py`.
-- [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`).
+- [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`) - **Best Baseline**.
 - [x] **VRAM Optimization (RTX 4060/3060):**
     - Dynamic `batch_size` based on model size.
     - **Gradient Accumulation** (Effective batch size = 32) for stability.
-- [x] Move to **SegFormer-B3** for final comparison (Test 7).
+- [x] Test **SegFormer-B3** (Test 9) - **Abandoned** (Severe Overfitting/Fragmentation).
+- [ ] Implement **SwinUNETR** (MONAI) for Stage III comparison.
 - [ ] Implement **Attention Maps** visualization.
 
 #### 2. Advanced Preprocessing & Data
@@ -65,3 +66,9 @@ Goal: Optimize transformers. Systemic clinical comparison.
     - Strengthened **ElasticTransform** to fight overfitting.
     - Increased morphological cleaning to **100px**.
 - **Status**: Ready to run.
+
+### 26.05.2025: Test 9 Regression (SegFormer-B3)
+- **Issue**: Significant performance regression compared to B2. mIoU dropped to 0.68.
+- **Root Cause**: B3 backbone (44M params) is too complex for the training set, resulting in massive overfitting.
+- **Clinical Observation**: SRF HD95 (114.96) shows the model creates disconnected "island" clusters far from the retina.
+- **Decision**: Abandon further SegFormer scaling. Pivot entirely to **SwinUNETR** for better hierarchical spatial awareness.

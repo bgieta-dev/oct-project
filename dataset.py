@@ -110,9 +110,15 @@ class OCTDataset(Dataset):
             # Scale back to 0-255 uint8 so processor works correctly
             image = (image * 255).astype(np.uint8)
             
-        # SegFormer wants pixel_values (C, H, W) and labels (H, W)
-        inputs = self.processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.squeeze(0)
+        # Handle processor (SegFormer) vs Manual (SwinUNETR)
+        if self.processor:
+            inputs = self.processor(images=image, return_tensors="pt")
+            pixel_values = inputs.pixel_values.squeeze(0)
+        else:
+            # Manual preprocessing for MONAI models
+            # image is (H, W, C) uint8, convert to (C, H, W) float32 [0, 1]
+            pixel_values = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+
         labels = torch.from_numpy(mask).long()
         
         return {"pixel_values": pixel_values, "labels": labels, "orig_img": image}
