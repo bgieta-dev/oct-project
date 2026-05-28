@@ -191,6 +191,10 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                 if "monai" in config.MODEL_NAME:
                     logits = model(pixel_values)
+                    if logits.shape[-2:] != labels.shape[-2:]:
+                        logits = torch.nn.functional.interpolate(
+                            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                        )
                 else:
                     outputs = model(pixel_values=pixel_values, labels=labels)
                     logits = torch.nn.functional.interpolate(
@@ -227,6 +231,10 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                         if "monai" in config.MODEL_NAME:
                             logits = model(pixel_values)
+                            if logits.shape[-2:] != labels.shape[-2:]:
+                                logits = torch.nn.functional.interpolate(
+                                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                                )
                         else:
                             outputs = model(pixel_values=pixel_values)
                             logits = torch.nn.functional.interpolate(

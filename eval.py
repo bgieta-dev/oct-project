@@ -155,6 +155,10 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         with torch.no_grad():
             if "monai" in config.MODEL_NAME:
                 logits = model(pixel_values)
+                if logits.shape[-2:] != (512, 512):
+                    logits = torch.nn.functional.interpolate(
+                        logits, size=(512, 512), mode="bilinear", align_corners=False
+                    )
             else:
                 outputs = model(pixel_values=pixel_values)
                 logits = torch.nn.functional.interpolate(
@@ -176,18 +180,32 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                         scaled_pixels = pixel_values
                     
                     # Original pass at this scale
-                    s_outputs = model(pixel_values=scaled_pixels)
-                    s_logits = torch.nn.functional.interpolate(
-                        s_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-                    )
+                    if "monai" in config.MODEL_NAME:
+                        s_logits = model(scaled_pixels)
+                        if s_logits.shape[-2:] != (512, 512):
+                            s_logits = torch.nn.functional.interpolate(
+                                s_logits, size=(512, 512), mode="bilinear", align_corners=False
+                            )
+                    else:
+                        s_outputs = model(pixel_values=scaled_pixels)
+                        s_logits = torch.nn.functional.interpolate(
+                            s_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
+                        )
                     all_logits.append(s_logits)
                     
                     # Flipped pass at this scale
                     f_pixels = torch.flip(scaled_pixels, [3])
-                    f_outputs = model(pixel_values=f_pixels)
-                    f_logits = torch.nn.functional.interpolate(
-                        f_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-                    )
+                    if "monai" in config.MODEL_NAME:
+                        f_logits = model(f_pixels)
+                        if f_logits.shape[-2:] != (512, 512):
+                            f_logits = torch.nn.functional.interpolate(
+                                f_logits, size=(512, 512), mode="bilinear", align_corners=False
+                            )
+                    else:
+                        f_outputs = model(pixel_values=f_pixels)
+                        f_logits = torch.nn.functional.interpolate(
+                            f_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
+                        )
                     # Unflip
                     uf_logits = torch.flip(f_logits, [3])
                     all_logits.append(uf_logits)
