@@ -1,0 +1,12 @@
+2026-05-27 16:55:28,022 | INFO     | root:main:60 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-27_16-55-28
+2026-05-27 16:55:28,024 | INFO     | root:main:63 - Device: NVIDIA GeForce RTX 3060
+2026-05-27 16:55:28,024 | INFO     | root:main:65 - GPU Memory: 12.00 GB
+2026-05-27 16:55:28,025 | INFO     | root:main:69 - --- TRAINING ---
+2026-05-27 16:55:28,039 | INFO     | root:train_model:85 - Split: Train=56, Val=7, Test=7
+2026-05-27 16:55:28,107 | INFO     | root:calculate_dynamic_weights:64 - Calculating dynamic class weights...
+2026-05-27 16:57:38,369 | INFO     | root:train_model:102 - Dynamic weights: [0.00921245 1.03819163 1.54269683 1.40989909]
+2026-05-27 16:57:38,472 | WARNING  | py.warnings:_showwarnmsg:109 - C:\Users\Student\Documents\python\oct-project\train.py:117: UserWarning: Argument(s) 'alpha_affine' are not valid for transform ElasticTransform
+  A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=1.0),
+
+2026-05-27 16:57:38,474 | INFO     | root:train_model:146 - Initializing MONAI SwinUNETR (2D)...
+2026-05-27 16:57:38,644 | INFO     | root:train_model:178 - Starting training for 80 epochs...
