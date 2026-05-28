@@ -13,6 +13,10 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
   - Clinical Intensity Normalization (1-99 percentile clipping).
   - Heavy Augmentation: Rotate, GaussNoise, RandomResizedCrop (Albumentations 2.0).
 - **Input Strategy**: **2.5D Context** (3-channel stack of adjacent slices: $t-1, t, t+1$).
+- **Data Volume Analysis**:
+  - The dataset contains volumes with **49 slices** (Spectralis) and **128 slices** (Cirrus/Topcon).
+  - **Hardware Constraint**: Full volumetric 3D modeling (SwinUNETR 3D) for 128-slice stacks is not feasible on **12GB VRAM** without extreme downsampling.
+  - **Strategy**: 2.5D stacking is used as the optimal compromise between vertical context and memory efficiency.
 - **Optimization**:
   - Hybrid Loss: $0.5 \cdot FocalLoss + 0.5 \cdot DiceLoss$.
   - **Dynamic Class Weighting**: Automatically balances fluid vs. background classes.
@@ -45,7 +49,23 @@ python main.py
 
 ## Experiments
 
-### 2026-05-23 (test9 - Extreme Augmentation & B3 Final Battle)
+### 2026-05-29 (test11 - THE GOLDEN MODEL)
+**Model:** SegFormer (**nvidia/mit-b2**)
+**Objective:** The definitive final push. Combining B2's superior generalization with every advanced strategy developed during the project.
+**Setup:** `LR=5e-5`, **Dropout (0.2)**, **Focal-Tversky Loss**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
+**Rationale:** B2 consistently produces more robust test scores than B3 or Swin. This run aims to break 0.75 mIoU by utilizing heavy regularization and motion-aware 2.5D context.
+
+### 2026-05-28 (test10 - SwinUNETR Architectural Shift)
+**Model:** MONAI SwinUNETR (2D variant)
+**Results:** Final Test mIoU: **0.6489**, Best Val mIoU: **0.7432**, Final mDice: 0.7714.
+**Setup:** `LR=5e-5`, **Focal-Tversky Loss**, **2.5D Context**, Multi-scale TTA.
+**Observations:** 
+- **Validation vs. Test Gap:** The model hit a record high validation score (0.7432) but collapsed on the test set (0.6489). This indicates extreme overfitting, likely due to the lack of ImageNet pre-trained weights for the SwinUNETR backbone in this implementation.
+- **Local Feature Strength:** IRF IoU (0.57) was competitive with SegFormer, showing Swin's window-based attention is effective for small cysts.
+- **Convergence:** Significantly slower than SegFormer (Early stopping at epoch 60 vs 30).
+**Conclusion:** Architectural complexity (Swin) does not outweigh the benefits of robust pre-training (SegFormer) for this small dataset size.
+
+### 2026-05-23 (test9 - Planned/In Progress)
 **Model:** SegFormer (**nvidia/mit-b3**)
 **Objective:** Final attempt to tame the B3 backbone using the most advanced regularization and loss strategies. If B3 cannot beat B2's score (0.7409) here, we pivot to Swin.
 **Pipeline Upgrades:**

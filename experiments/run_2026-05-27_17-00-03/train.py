@@ -14,6 +14,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import config
 from utils import get_stratified_splits
+from monai.networks.nets import SwinUNETR
 import torch.nn.functional as F
 
 class FocalLoss(torch.nn.Module):
@@ -128,8 +129,12 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     val_aug_list.append(A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1]))
     val_transform = A.Compose(val_aug_list)
 
-    processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
-    processor.do_reduce_labels = False
+    # Processor (Only for SegFormer)
+    if "monai" not in config.MODEL_NAME:
+        processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
+        processor.do_reduce_labels = False
+    else:
+        processor = None
 
     train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, use_multimodal=config.USE_MULTIMODAL)
     val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
@@ -137,14 +142,25 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=4, pin_memory=True)
 
-    model = SegformerForSemanticSegmentation.from_pretrained(
-        config.MODEL_NAME, 
-        num_labels=config.NUM_LABELS, 
-        ignore_mismatched_sizes=True,
-        hidden_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
-        attention_probs_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
-        classifier_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0)
-    ).to(config.DEVICE)
+    if "monai" in config.MODEL_NAME:
+        logging.info("Initializing MONAI SwinUNETR (2D)...")
+        model = SwinUNETR(
+            in_channels=config.SWIN_CFG["in_channels"],
+            out_channels=config.SWIN_CFG["out_channels"],
+            feature_size=config.SWIN_CFG["feature_size"],
+            drop_rate=config.SWIN_CFG["drop_rate"],
+            attn_drop_rate=config.SWIN_CFG["attn_drop_rate"],
+            spatial_dims=2
+        ).to(config.DEVICE)
+    else:
+        model = SegformerForSemanticSegmentation.from_pretrained(
+            config.MODEL_NAME, 
+            num_labels=config.NUM_LABELS, 
+            ignore_mismatched_sizes=True,
+            hidden_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
+            attention_probs_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0),
+            classifier_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0)
+        ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
     warmup_epochs = getattr(config, "WARMUP_EPOCHS", 10)
@@ -173,10 +189,17 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             labels = batch["labels"].to(config.DEVICE)
             
             with torch.amp.autocast('cuda', enabled=config.USE_AMP):
-                outputs = model(pixel_values=pixel_values, labels=labels)
-                logits = torch.nn.functional.interpolate(
-                    outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
+                if "monai" in config.MODEL_NAME:
+                    logits = model(pixel_values)
+                    if logits.shape[-2:] != labels.shape[-2:]:
+                        logits = torch.nn.functional.interpolate(
+                            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                        )
+                else:
+                    outputs = model(pixel_values=pixel_values, labels=labels)
+                    logits = torch.nn.functional.interpolate(
+                        outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                    )
                 
                 main_loss = 0.5 * focal_criterion(logits, labels)
                 if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
@@ -206,10 +229,17 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     pixel_values = batch["pixel_values"].to(config.DEVICE)
                     labels = batch["labels"].to(config.DEVICE)
                     with torch.amp.autocast('cuda', enabled=config.USE_AMP):
-                        outputs = model(pixel_values=pixel_values)
-                    logits = torch.nn.functional.interpolate(
-                        outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                    )
+                        if "monai" in config.MODEL_NAME:
+                            logits = model(pixel_values)
+                            if logits.shape[-2:] != labels.shape[-2:]:
+                                logits = torch.nn.functional.interpolate(
+                                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                                )
+                        else:
+                            outputs = model(pixel_values=pixel_values)
+                            logits = torch.nn.functional.interpolate(
+                                outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                            )
                     preds = logits.argmax(dim=1).cpu().numpy()
                     
                     if getattr(config, "MIN_REGION_SIZE", 0) > 0:

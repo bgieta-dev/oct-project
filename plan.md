@@ -1,4 +1,4 @@
-# Plan: OCT Seg (Maks)
+# Plan: OCT Seg 
 
 ## Status: Stage III (16.05 - 15.06.2025)
 
@@ -9,66 +9,46 @@
 - [x] Multi-modal input (Orig + Denoised + Edge).
 
 ### Stage III: Transformers & Clinical Validation (16.05 - 15.06)
-Goal: Optimize transformers. Systemic clinical comparison.
+Goal: Optimize transformers. Systemic clinical comparison (CNN vs Transformer).
 
 #### 1. Model Upgrade & Stability
 - [x] Centralize config in `config.py`.
-- [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`) - **Best Baseline**.
-- [x] **VRAM Optimization (RTX 4060/3060):**
-    - Dynamic `batch_size` based on model size.
-    - **Gradient Accumulation** (Effective batch size = 32) for stability.
-- [x] Test **SegFormer-B3** (Test 9) - **Abandoned** (Severe Overfitting/Fragmentation).
-- [ ] Implement **SwinUNETR** (MONAI) for Stage III comparison.
-- [ ] Implement **Attention Maps** visualization.
+- [x] Upgrade to **SegFormer-B2** (`nvidia/mit-b2`) - **Current High Score (0.7409)**.
+- [x] Test **SegFormer-B3** - Done (Struggles with overfitting on small dataset).
+- [x] Implement **SwinUNETR** (MONAI) - **Validated in 2.5D**.
+- [ ] **SwinUNETR Optimization**: Address the test set collapse (Recall vs Generalization).
+- [ ] **Attention Maps Visualization**: Script to extract weights for IRF/SRF focus (Thesis Chapter 4 requirement).
 
 #### 2. Advanced Preprocessing & Data
 - [x] **Intensity Normalization**: 1-99 percentile clipping + [0, 1] scaling.
 - [x] **Augmentation Expansion**: `Rotate(10)`, `GaussNoise`, `RandomResizedCrop`.
 - [x] **Stratified Split**: 80/10/10 split stratified by OCT device (Cirrus/Spectralis/Topcon).
 - [x] **Clinical Unification**: Standardized Class 3 as **PED** (Pigment Epithelium Detachment).
-- [ ] Optional: Cross-dataset test on **AROI**.
+- [x] **2.5D Context**: Implemented motion-compensated stacking ($t-1, t, t+1$).
 
 #### 3. Metrics & Benchmarking
 - [x] **Surface Metrics**: Added **HD95** (Hausdorff Distance) and **ASD** (Average Surface Distance).
+- [x] **Boundary Precision**: Anderson et al. (2023) methodology implemented.
 - [x] **Fixed Evaluation**: `eval.py` now picks best class-specific examples for static reporting.
-- [x] **Test Set**: Evaluation now runs on dedicated 10% test set (previously 20% val).
-- [ ] Run **nnUNet 2D baseline** (joint task with Eryk).
+- [ ] Run **nnUNet 2D baseline** (Joint task with Eryk).
 
-#### 4. Thesis & Documentation (Report due 15.06)
+#### 4. Thesis & Documentation (Partial Report due 15.06)
 - [ ] Write partial report (min. 15 pages).
-- [ ] Theoretical background: CNN vs Transformers in OCT.
-- [ ] Qualitative analysis: Error cases for IRF vs SRF.
-
----
-
-## Technical TODOs
-
-### Active Tasks
-- [ ] **SwinUNETR**: Implement model in MONAI framework.
-- [ ] **Attention maps**: Script to extract transformer weights for IRF/SRF focus.
-- [ ] **B3 Training**: Run long training (50+ epochs) on B3.
-
-### Done
-- [x] Add log
-- [x] Test B2 model
-- [x] Add HD95/ASD to main.py logging.
+- [ ] **Chapter 3**: Transformer architectures for OCT (Theory).
+- [ ] **Chapter 4**: Attention Analysis (Visualizing focus on IRF/SRF).
+- [ ] **Chapter 5**: Clinical comparison (CNN vs Transformer).
 
 ---
 
 ## Log / Diary
 
-### 22.05.2025: Test 8 Implementation (B2 Base)
-- **Objective**: Improve PED boundary precision and IRF recall using Tversky Loss and CLAHE.
-- **Changes**:
-    - Switched model to **nvidia/mit-b2** to isolate impact.
-    - Switched Dice Loss to **Tversky Loss** (alpha=0.3, beta=0.7) to penalize False Negatives.
-    - Added **CLAHE** to the preprocessing pipeline for edge salience.
-    - Strengthened **ElasticTransform** to fight overfitting.
-    - Increased morphological cleaning to **100px**.
-- **Status**: Ready to run.
+### 29.05.2025: SwinUNETR 3D Feasibility Analysis
+- **Analysis**: 12GB VRAM is insufficient for full 3D SwinUNETR without extreme patch-based downsampling (which loses context). 56 volumes are insufficient for 3D transformer training from scratch.
+- **Decision**: Focus on **Golden 2.5D Model (test 11)** as the primary research output. 3D remains as "Future Work".
 
-### 26.05.2025: Test 9 Regression (SegFormer-B3)
-- **Issue**: Significant performance regression compared to B2. mIoU dropped to 0.68.
-- **Root Cause**: B3 backbone (44M params) is too complex for the training set, resulting in massive overfitting.
-- **Clinical Observation**: SRF HD95 (114.96) shows the model creates disconnected "island" clusters far from the retina.
-- **Decision**: Abandon further SegFormer scaling. Pivot entirely to **SwinUNETR** for better hierarchical spatial awareness.
+### 28.05.2025: SwinUNETR 2.5D (test 10)
+- **Results**: Val mIoU: 0.7432 (Record), Test mIoU: 0.6489 (Overfitting).
+- **Conclusion**: Swin's window attention is powerful but extremely sensitive to noise without ImageNet pre-training.
+
+### 22.05.2025: Test 8 Implementation (B2 Base)
+- **Objective**: Best result so far (0.7409 mIoU) using Tversky Loss and CLAHE.

@@ -97,7 +97,7 @@ def main():
         logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
 
     # archiving project docs and scripts
-    for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt"]:
+    for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "best_model.pth"]:
         if os.path.exists(f):
             shutil.copy(f, os.path.join(exp_dir, f))
             

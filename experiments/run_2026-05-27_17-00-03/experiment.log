@@ -97,3 +97,15 @@
 2026-05-28 03:41:17,463 | INFO     | root:train_model:296 - Training complete. Total time: 10:41:08
 2026-05-28 03:41:17,671 | INFO     | root:main:81 - --- EVALUATION ---
 2026-05-28 03:41:17,687 | INFO     | root:evaluate_model:72 - Loaded test set from test_patients.txt
+
+
+(venv) (base) PS C:\Users\Student\Documents\python\oct-project> python .\eval.py
+INFO:root:Loaded test set from test_patients.txt
+INFO:root:Loaded weights from best_model.pth
+INFO:root:Scanning for best class-specific examples...
+INFO:root:Fixed vis indices: {1: 331, 2: 283, 3: 556}
+INFO:root:Evaluating on 169 batches...
+INFO:root:Config: MODEL_NAME=monai/swinunetr, USE_MULTIMODAL=True, DEVICE=cuda
+INFO:root:Saved visualization to .\predictions.png
+INFO:root:Saved 5 worst failure cases to .\failures
+{'class_ious': {0: 0.9700853361020609, 1: 0.5723893397294118, 2: 0.6069008490986461, 3: 0.4463537776895313}, 'class_dices': {0: 0.9848155491796476, 1: 0.7280503947297337, 2: 0.755368135425497, 3: 0.6172124477077197}, 'class_hd95': {1: 46.385223459125925, 2: 100.96851509074114, 3: 89.99082340332806}, 'class_asd': {1: 12.35013659030505, 2: 43.929036864096624, 3: 32.75078713960776}, 'class_avg_regions_gt': {1: 8.9375, 2: 1.2727272727272727, 3: 1.304635761589404}, 'class_avg_regions_pred': {1: 6.858044164037855, 2: 1.9715447154471544, 3: 2.740740740740741}, 'class_boundary_precision': {1: 0.028903006517793983, 2: 0.030019843906306763, 3: 0.005090273571330191}, 'class_avg_pixel_area': {1: 10266.62109375, 2: 16132.856459330143, 3: 23202.582781456953}, 'mIoU': 0.6489323256549125, 'mDice': 0.7713616317606494, 'mHD95': 79.11485398439838, 'mASD': 29.676653531336473}

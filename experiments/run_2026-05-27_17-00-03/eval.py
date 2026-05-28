@@ -18,6 +18,7 @@ from dataset import OCTDataset
 import logging
 import config
 from utils import get_stratified_splits
+from monai.networks.nets import SwinUNETR
 
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
@@ -78,11 +79,25 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
     val_imgs, val_masks = test_imgs, test_masks # Evaluate on TEST SET now
 
-    processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
-    model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True)
+    if "monai" not in config.MODEL_NAME:
+        processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
+        model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True)
+    else:
+        processor = None
+        from monai.networks.nets import SwinUNETR
+        model = SwinUNETR(
+            in_channels=config.SWIN_CFG["in_channels"],
+            out_channels=config.SWIN_CFG["out_channels"],
+            feature_size=config.SWIN_CFG["feature_size"],
+            drop_rate=config.SWIN_CFG["drop_rate"],
+            attn_drop_rate=config.SWIN_CFG["attn_drop_rate"],
+            spatial_dims=2
+        )
     
     try:
-        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE, weights_only=True), strict=True)
+        # Load weights
+        state_dict = torch.load(model_path, map_location=config.DEVICE, weights_only=True)
+        model.load_state_dict(state_dict, strict=not "monai" in config.MODEL_NAME)
         logging.info(f"Loaded weights from {model_path}")
     except RuntimeError as e:
         logging.warning(f"Strict load failed: {e}. Trying non-strict load...")
@@ -91,7 +106,12 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
     model.to(config.DEVICE).eval()
 
-    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
+    val_aug_list = []
+    if getattr(config, "USE_CLAHE", False):
+        val_aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=1.0))
+    val_aug_list.append(A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1]))
+    val_transform = A.Compose(val_aug_list)
+
     ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
     loader = DataLoader(ds, batch_size=config.BATCH_SIZE, shuffle=False)
 
@@ -133,10 +153,17 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         orig_img_batch = batch["orig_img"].numpy()
         
         with torch.no_grad():
-            outputs = model(pixel_values=pixel_values)
-            logits = torch.nn.functional.interpolate(
-                outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-            )
+            if "monai" in config.MODEL_NAME:
+                logits = model(pixel_values)
+                if logits.shape[-2:] != config.AUG_SIZE:
+                    logits = torch.nn.functional.interpolate(
+                        logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                    )
+            else:
+                outputs = model(pixel_values=pixel_values)
+                logits = torch.nn.functional.interpolate(
+                    outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                )
             
             if config.USE_TTA:
                 scales = getattr(config, "TTA_SCALES", [1.0])
@@ -145,7 +172,14 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 for s in scales:
                     # Rescale input
                     if s != 1.0:
-                        scaled_size = (int(512 * s), int(512 * s))
+                        new_h = int(config.AUG_SIZE[0] * s)
+                        new_w = int(config.AUG_SIZE[1] * s)
+                        # SwinUNETR requirements: must be divisible by 32
+                        if "monai" in config.MODEL_NAME:
+                            new_h = (new_h // 32) * 32
+                            new_w = (new_w // 32) * 32
+                        
+                        scaled_size = (new_h, new_w)
                         scaled_pixels = torch.nn.functional.interpolate(
                             pixel_values, size=scaled_size, mode="bilinear", align_corners=False
                         )
@@ -153,18 +187,32 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                         scaled_pixels = pixel_values
                     
                     # Original pass at this scale
-                    s_outputs = model(pixel_values=scaled_pixels)
-                    s_logits = torch.nn.functional.interpolate(
-                        s_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-                    )
+                    if "monai" in config.MODEL_NAME:
+                        s_logits = model(scaled_pixels)
+                        if s_logits.shape[-2:] != config.AUG_SIZE:
+                            s_logits = torch.nn.functional.interpolate(
+                                s_logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                            )
+                    else:
+                        s_outputs = model(pixel_values=scaled_pixels)
+                        s_logits = torch.nn.functional.interpolate(
+                            s_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                        )
                     all_logits.append(s_logits)
                     
                     # Flipped pass at this scale
                     f_pixels = torch.flip(scaled_pixels, [3])
-                    f_outputs = model(pixel_values=f_pixels)
-                    f_logits = torch.nn.functional.interpolate(
-                        f_outputs.logits, size=(512, 512), mode="bilinear", align_corners=False
-                    )
+                    if "monai" in config.MODEL_NAME:
+                        f_logits = model(f_pixels)
+                        if f_logits.shape[-2:] != config.AUG_SIZE:
+                            f_logits = torch.nn.functional.interpolate(
+                                f_logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                            )
+                    else:
+                        f_outputs = model(pixel_values=f_pixels)
+                        f_logits = torch.nn.functional.interpolate(
+                            f_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                        )
                     # Unflip
                     uf_logits = torch.flip(f_logits, [3])
                     all_logits.append(uf_logits)
