@@ -84,8 +84,8 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True)
     else:
         processor = None
+        from monai.networks.nets import SwinUNETR
         model = SwinUNETR(
-            img_size=config.SWIN_CFG["img_size"],
             in_channels=config.SWIN_CFG["in_channels"],
             out_channels=config.SWIN_CFG["out_channels"],
             feature_size=config.SWIN_CFG["feature_size"],
