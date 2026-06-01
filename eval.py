@@ -36,12 +36,16 @@ class BoundaryPrecisionAnalyzer:
 
 def get_retina_mask(img):
     """Anatomical prior: identifies the retina zone to filter out non-anatomical noise"""
-    # img is [H, W] normalized to [0, 1]
+    # Ensure img is float32 for processing
+    img_f = img.astype(np.float32)
+    if img_f.max() > 1.0:
+        img_f /= 255.0
+    
     # Use a large blur to capture the general 'mass' of the eye tissue
-    blurred = cv2.GaussianBlur(img, (31, 31), 0)
+    blurred = cv2.GaussianBlur(img_f, (31, 31), 0)
     row_means = np.mean(blurred, axis=1)
     
-    # Threshold to find non-black regions (vitreous is usually ~0)
+    # Threshold to find non-black regions
     # 0.03 is a safe floor for RETOUCH normalized scans
     mask_rows = row_means > 0.03
     
