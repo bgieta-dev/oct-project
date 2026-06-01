@@ -37,7 +37,7 @@ class BoundaryLoss(torch.nn.Module):
                 negmask = ~posmask
                 posdis = distance_transform_edt(posmask)
                 negdis = distance_transform_edt(negmask)
-                boundary = posdis - negdis
+                boundary = negdis - posdis
                 sdf[b, c] = boundary
 
         return sdf
