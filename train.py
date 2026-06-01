@@ -15,6 +15,48 @@ import matplotlib.pyplot as plt
 import config
 from utils import get_stratified_splits
 import torch.nn.functional as F
+from eval import get_retina_mask
+
+from scipy.ndimage import distance_transform_edt
+
+class BoundaryLoss(torch.nn.Module):
+    def __init__(self, num_classes=config.NUM_LABELS):
+        super(BoundaryLoss, self).__init__()
+        self.num_classes = num_classes
+
+    def compute_sdf(self, img_gt, out_shape):
+        """Compute Signed Distance Field"""
+        img_gt = img_gt.astype(np.uint8)
+        sdf = np.zeros(out_shape)
+
+        for b in range(out_shape[0]): # Batch
+            for c in range(1, out_shape[1]): # Class (skip background)
+                posmask = img_gt[b] == c
+                if not posmask.any():
+                    continue
+                negmask = ~posmask
+                posdis = distance_transform_edt(posmask)
+                negdis = distance_transform_edt(negmask)
+                boundary = posdis - negdis
+                sdf[b, c] = boundary
+
+        return sdf
+
+    def forward(self, probs, gt):
+        """
+        probs: (B, C, H, W) - Softmax probabilities
+        gt: (B, H, W) - Ground Truth labels
+        """
+        with torch.no_grad():
+            gt_numpy = gt.cpu().numpy()
+            sdf_numpy = self.compute_sdf(gt_numpy, probs.shape)
+            sdf = torch.from_numpy(sdf_numpy).float().to(probs.device)
+
+        # Boundary loss is the product of spatial probabilities and SDF
+        # We want to minimize probabilities in the negative SDF regions (outside GT)
+        # and maximize them in the positive SDF regions (inside GT)
+        loss = probs * sdf
+        return loss.mean()
 
 class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=None, gamma=2, reduction='mean'):
@@ -147,12 +189,23 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 10)
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_epochs, num_training_steps=epochs)
+    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 15)
+    
+    # Hybrid Scheduler: Linear Warmup + Polynomial Decay (power=1.0)
+    # Aligned with official requirements and original SegFormer specification
+    def lr_lambda(current_step):
+        if current_step < warmup_epochs:
+            return float(current_step) / float(max(1, warmup_epochs))
+        # Polynomial decay: (1 - (step - warmup) / (total - warmup)) ^ power
+        progress = float(current_step - warmup_epochs) / float(max(1, epochs - warmup_epochs))
+        return max(0.0, (1.0 - progress) ** 1.0)
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
     tversky_criterion = TverskyLoss(alpha=0.3, beta=0.7)
+    boundary_criterion = BoundaryLoss()
 
     best_miou = 0.0
     patience = 10
@@ -184,6 +237,12 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 else:
                     aux_loss = 0.5 * dice_loss(logits, labels)
                 
+                # Boundary Loss Integration
+                if getattr(config, "USE_BOUNDARY_LOSS", False):
+                    probs = F.softmax(logits, dim=1)
+                    b_loss = boundary_criterion(probs, labels)
+                    aux_loss += getattr(config, "BOUNDARY_ALPHA", 0.1) * b_loss
+
                 loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             
             scaler.scale(loss).backward()
@@ -210,15 +269,43 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     logits = torch.nn.functional.interpolate(
                         outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                     )
-                    preds = logits.argmax(dim=1).cpu().numpy()
                     
+                    # Threshold-based assignment
+                    probs = torch.softmax(logits, dim=1).cpu().numpy()
+                    preds = np.zeros(probs.shape[0:1] + probs.shape[2:], dtype=np.uint8)
+                    thresholds = getattr(config, "CLASS_THRESHOLDS", {1: 0.5, 2: 0.5, 3: 0.5})
+                    for c in [3, 2, 1]:
+                        thresh = thresholds.get(c, 0.5)
+                        preds[probs[:, c] > thresh] = c
+
                     if getattr(config, "MIN_REGION_SIZE", 0) > 0:
                         import cv2
                         cleaned_preds = []
-                        for p in preds:
+                        kernel = np.ones((3, 3), np.uint8)
+                        # Use first channel (normalized) for anatomical mask estimation
+                        orig_imgs = pixel_values.cpu().numpy()[:, 0, :, :] 
+
+                        for b_idx in range(len(preds)):
+                            p = preds[b_idx]
+                            
+                            # Anatomical retina mask filter
+                            ret_mask = get_retina_mask(orig_imgs[b_idx])
+                            
                             new_p = np.zeros_like(p)
                             for c in range(1, config.NUM_LABELS):
                                 c_mask = (p == c).astype(np.uint8)
+                                c_mask = c_mask * ret_mask
+
+                                # Selective Morphological Smoothing
+                                if getattr(config, "USE_MORPH_SMOOTHING", True):
+                                    # Always close small internal holes
+                                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_CLOSE, kernel)
+                                    
+                                    # Only OPEN (smooth spikes) for IRF (Class 1)
+                                    # SRF and PED remain sharp for clinical fidelity
+                                    if c == 1:
+                                        c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel)
+
                                 num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
                                 for lbl in range(1, num_labels):
                                     if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:

@@ -1,37 +1,36 @@
-# Improvement Plan - Post Test 9
+# OCT Segmentation Improvement Plan (Maksymilian - Student 2)
 
-## Current State Analysis (Test 9 Failure)
-- **Model**: SegFormer (nvidia/mit-b3)
-- **Status**: **Total Failure to Generalize.** mIoU dropped to 0.6844.
-- **Key Issues Identified**:
-    1. **Structural Fragmentation**: SRF HD95 reached **114.96**. The model is hallucinating small fluid clusters (islands) all over the image.
-    2. **PED Collapse**: PED IoU fell back to 0.52. B3 fails to leverage CLAHE and Tversky loss effectively.
-    3. **Complexity Mismatch**: The 44M parameter B3 backbone is too heavy for the 56-volume training set, leading to "memorization" of noise rather than features.
+## Current Status (Post-test11: The Golden Model)
+- **Best Model:** SegFormer (nvidia/mit-b2)
+- **Results:** mIoU: **0.7529**, DSC: **0.8521**, HD95: **67.30**
+- **Analysis:** We have achieved excellent pixel overlap, but the **HD95 (Hausdorff Distance)** remains our biggest bottleneck. High HD95 values (especially in SRF: 86.48) indicate that the model's boundaries are either "jagged" or there are small outlier pixels (islands) far from the true pathology.
 
 ---
 
-## Pivotal Shift: SwinUNETR Migration
+## Phase 3: HD95 & Boundary Optimization (The Clinical Refinement)
 
-### 1. High-Priority Action: Abandon SegFormer-B3
-- **Action**: Halt all SegFormer-B3 experiments.
-- **Rationale**: Continuous testing proves that increasing backbone size in SegFormer does not yield clinical improvements for this dataset.
+### 1. Boundary-Aware Loss (Boundary Loss)
+- **Action:** Integrate a **Boundary Loss** term into the hybrid criterion.
+- **Why:** Current losses (Focal-Tversky) focus on the region volume. Boundary Loss specifically penalizes the distance between the predicted edge and the ground truth edge. This forces the model to prioritize the "clinical correctness" of the fluid boundaries during the backpropagation step.
 
-### 2. Implementation: SwinUNETR (MONAI)
-- **Action**: Implement **SwinUNETR** with Shifted-Window Attention.
-- **Rationale**: Swin Transformers use a hierarchical approach that captures local texture (IRF) and global context (PED) simultaneously without the fragmentation seen in B3.
-- **Goal**: Regain mIoU > 0.74 and stabilize clinical boundaries.
+### 2. Advanced Morphological Post-Processing
+- **Action:** Implement a two-step refinement: `MORPH_CLOSE` followed by `MORPH_OPEN`.
+- **Why:** 
+    - **Closing:** Fills small internal holes in segmented cysts, making them solid.
+    - **Opening:** Removes small "spiky" protrusions and isolated noise pixels that drastically inflate the HD95 metric.
+    - **Result:** Smoother, more anatomically plausible shapes that align better with the smooth retina layers.
 
-### 3. Debugging Tool: Attention Map Visualization
-- **Action**: Script to export **attention maps** for the failed B3 run and the upcoming SwinUNETR.
-- **Rationale**: We need to see *where* B3 was looking when it hallucinated the SRF islands. This is critical for the "Analysis of Failure" section of the diploma thesis.
+### 3. CRF (Conditional Random Fields)
+- **Action:** Implement a **Dense CRF** refinement step after inference.
+- **Why:** CRF looks at the original image intensities. It "snaps" the segmentation mask to the high-contrast boundaries of the OCT (e.g., the RPE line). This corrects the "bleeding" effect where the model slightly overshoots the fluid boundary into solid tissue.
 
-### 4. Loss Function Stability
-- **Action**: Re-tune **Tversky Loss** parameters ($\alpha=0.5, \beta=0.5$) for initial SwinUNETR runs.
-- **Rationale**: The aggressive recall prioritization ($\beta=0.7$) might have amplified the noise in B3. We will return to a balanced Dice-like Tversky to stabilize the new architecture.
+### 4. Attention-Guided Refinement (Chapter 4 Thesis Goal)
+- **Action:** Use the extracted **Attention Maps** to identify where the model is "uncertain".
+- **Why:** If we see the attention is scattered in areas with high HD95, we can apply localized smoothing only in those uncertain regions, preserving the sharp details of the high-confidence segments.
 
 ---
 
-## Immediate Next Step (Test 10 Plan)
-1. **Model**: MONAI SwinUNETR (2D or 3D).
-2. **Preprocessing**: Maintain CLAHE and 2.5D context.
-3. **Task**: Initial "Swin-Baseline" run to compare against SegFormer-B2 (0.74).
+## Phase 4: Final Benchmarking & Thesis Closure
+1. **nnUNet Baseline:** Obtain Eryk's results to complete the comparison table.
+2. **Qualitative Analysis:** Select 5 "Golden Examples" where the Transformer's attention mechanism clearly outperforms CNN-based local pooling.
+3. **Inference Profiling:** Measure millisecond-per-slice speed for real-time viability discussion in Chapter 5.

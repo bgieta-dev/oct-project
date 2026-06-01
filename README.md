@@ -45,15 +45,46 @@ python main.py
 ```
 3. Check `experiments/run_TIMESTAMP/` for logs, `best_model.pth`, and `predictions.png`.
 
+## Stage III Findings / Thesis Conclusions
+
+Based on the official thesis requirements, the systematic comparison between SegFormer-B2 and SegFormer-B3 yielded the following conclusions:
+
+1. **Impact of Encoder Scale:** 
+   - Scaling from B2 (24M parameters) to B3 (44M parameters) resulted in **severe overfitting** due to the small size of the RETOUCH dataset (56 training volumes).
+   - **B2 (Golden Model)** proved to be the optimal scale, effectively generalizing and capturing both large (SRF) and small (IRF) fluid regions when supported by 2.5D context and heavy regularization.
+
+2. **Benchmark Results (B2 vs B3):**
+   - **SegFormer-B2 (Test 11):** DSC = **0.8521**, HD95 = **67.30**
+   - **SegFormer-B3 (Test 9):** DSC = 0.8014, HD95 = 80.37
+   - *Note: Waiting for nnUNet 2D baseline results from Student 1 (Eryk) for the final comparative table.*
+
 ---
 
 ## Experiments
 
+### 2026-06-01 (test12 - THE CLINICAL FINAL - Planned/In Progress)
+**Model:** SegFormer (**nvidia/mit-b2**)
+**Objective:** Achieve the definitive clinical-grade segmentation by optimizing the HD95 metric and boosting the recall of small fluid structures (IRF).
+**Setup:** `LR=6e-5` (Official Compliance), **Dropout (0.2)**, **Focal-Tversky Loss**, **Hybrid Warmup-Polynomial Scheduler**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
+**Technical Upgrades (The Full Refinement Suite):**
+
+- **Boundary-Aware Loss:** Integrated a `BoundaryLoss` term to explicitly penalize anatomical distance errors, targeting a reduction in HD95.
+- **Anatomical Retina Masking:** Implemented an intensity-based "Retina Zone Prior" to mechanically eliminate False Positives in the vitreous and sclera.
+- **IRF Detection Boost:** 
+    - Extended Multi-Scale TTA to **1.5x** to magnify microscopic cysts.
+    - Implemented **Class-Specific Thresholding** (IRF threshold lowered to **0.35**) to prioritize fluid recall.
+- **Selective Anatomical Smoothing:** Refined morphological post-processing. Applied smoothing (`OPEN`) only to naturally rounded structures (**IRF**), while preserving the sharp, "spiky" clinical boundaries of **PED** and **SRF** by using only the `CLOSE` operation.
+- **Attention Map Visualization:** Integrated a script to extract and visualize spatial attention heatmaps for clinical interpretability (Thesis Chapter 4).
+
 ### 2026-05-29 (test11 - THE GOLDEN MODEL)
 **Model:** SegFormer (**nvidia/mit-b2**)
-**Objective:** The definitive final push. Combining B2's superior generalization with every advanced strategy developed during the project.
+**Results:** Final Test mIoU: **0.7529** (Record), Final mDice: **0.8521**, mHD95: 67.30
 **Setup:** `LR=5e-5`, **Dropout (0.2)**, **Focal-Tversky Loss**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
-**Rationale:** B2 consistently produces more robust test scores than B3 or Swin. This run aims to break 0.75 mIoU by utilizing heavy regularization and motion-aware 2.5D context.
+**Observations:** 
+- **New State-of-the-Art:** This run successfully broke the 0.75 mIoU barrier, confirming that the B2 backbone combined with heavy regularization and 2.5D context is the optimal configuration for the RETOUCH dataset.
+- **PED Breakthrough:** Class 3 (PED) IoU reached **0.6977**, a significant jump from previous experiments, validating the use of Focal-Tversky loss to focus on difficult anatomical boundaries.
+- **Generalization:** The 0.2 Dropout rate effectively closed the validation-test gap that plagued the B3 and SwinUNETR runs.
+**Conclusion:** The project terminates here with a highly robust, clinically-relevant segmentation model.
 
 ### 2026-05-28 (test10 - SwinUNETR Architectural Shift)
 **Model:** MONAI SwinUNETR (2D variant)

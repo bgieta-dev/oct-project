@@ -83,6 +83,7 @@ def main():
     
     logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
     logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
+    logging.info(f"Model Parameters: {metrics.get('params', 0):.2f}M")
     
     for c in [1, 2, 3]:
         name = config.CLASS_NAMES[c]
@@ -97,7 +98,7 @@ def main():
         logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
 
     # archiving project docs and scripts
-    for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt"]:
+    for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]:
         if os.path.exists(f):
             shutil.copy(f, os.path.join(exp_dir, f))
             
