@@ -1,0 +1,90 @@
+2026-05-29 13:59:49,722 | INFO     | root:main:60 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-29_13-59-49
+2026-05-29 13:59:49,726 | INFO     | root:main:63 - Device: NVIDIA GeForce RTX 3060
+2026-05-29 13:59:49,727 | INFO     | root:main:65 - GPU Memory: 12.00 GB
+2026-05-29 13:59:49,727 | INFO     | root:main:69 - --- TRAINING ---
+2026-05-29 13:59:50,140 | INFO     | root:train_model:84 - Split: Train=56, Val=7, Test=7
+2026-05-29 13:59:50,210 | INFO     | root:calculate_dynamic_weights:63 - Calculating dynamic class weights...
+2026-05-29 14:00:36,790 | INFO     | root:train_model:101 - Dynamic weights: [0.00921245 1.03819163 1.54269683 1.40989909]
+2026-05-29 14:00:36,885 | WARNING  | py.warnings:_showwarnmsg:109 - C:\Users\Student\Documents\python\oct-project\train.py:116: UserWarning: Argument(s) 'alpha_affine' are not valid for transform ElasticTransform
+  A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=1.0),
+
+2026-05-29 14:00:37,243 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-29 14:00:38,864 | INFO     | root:train_model:162 - Starting training for 80 epochs...
+2026-05-29 14:09:32,590 | INFO     | root:train_model:247 - Epoch 1 | Loss: 0.4705 | mIoU: 0.0557 | Time: 533s
+2026-05-29 14:09:32,723 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.0557)
+2026-05-29 14:18:23,392 | INFO     | root:train_model:247 - Epoch 2 | Loss: 0.4492 | mIoU: 0.1828 | Time: 530s
+2026-05-29 14:18:23,515 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.1828)
+2026-05-29 14:27:16,891 | INFO     | root:train_model:247 - Epoch 3 | Loss: 0.3752 | mIoU: 0.2753 | Time: 533s
+2026-05-29 14:27:17,026 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.2753)
+2026-05-29 14:36:07,807 | INFO     | root:train_model:247 - Epoch 4 | Loss: 0.3245 | mIoU: 0.3709 | Time: 530s
+2026-05-29 14:36:07,918 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.3709)
+2026-05-29 14:44:56,419 | INFO     | root:train_model:247 - Epoch 5 | Loss: 0.2884 | mIoU: 0.4419 | Time: 528s
+2026-05-29 14:44:56,529 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.4419)
+2026-05-29 14:53:45,189 | INFO     | root:train_model:247 - Epoch 6 | Loss: 0.2489 | mIoU: 0.5516 | Time: 528s
+2026-05-29 14:53:45,314 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.5516)
+2026-05-29 15:02:32,793 | INFO     | root:train_model:247 - Epoch 7 | Loss: 0.2113 | mIoU: 0.5651 | Time: 527s
+2026-05-29 15:02:32,919 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.5651)
+2026-05-29 15:11:20,256 | INFO     | root:train_model:247 - Epoch 8 | Loss: 0.1873 | mIoU: 0.6106 | Time: 527s
+2026-05-29 15:11:20,374 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6106)
+2026-05-29 15:20:09,136 | INFO     | root:train_model:247 - Epoch 9 | Loss: 0.1731 | mIoU: 0.6204 | Time: 528s
+2026-05-29 15:20:09,261 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6204)
+2026-05-29 15:28:57,214 | INFO     | root:train_model:247 - Epoch 10 | Loss: 0.1637 | mIoU: 0.6223 | Time: 527s
+2026-05-29 15:28:57,326 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6223)
+2026-05-29 15:37:45,888 | INFO     | root:train_model:247 - Epoch 11 | Loss: 0.1539 | mIoU: 0.6436 | Time: 528s
+2026-05-29 15:37:46,001 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6436)
+2026-05-29 15:46:33,743 | INFO     | root:train_model:247 - Epoch 12 | Loss: 0.1517 | mIoU: 0.6793 | Time: 527s
+2026-05-29 15:46:33,853 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6793)
+2026-05-29 15:55:22,398 | INFO     | root:train_model:247 - Epoch 13 | Loss: 0.1479 | mIoU: 0.6886 | Time: 528s
+2026-05-29 15:55:22,535 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6886)
+2026-05-29 16:04:36,199 | INFO     | root:train_model:247 - Epoch 14 | Loss: 0.1409 | mIoU: 0.6537 | Time: 553s
+2026-05-29 16:13:23,860 | INFO     | root:train_model:247 - Epoch 15 | Loss: 0.1388 | mIoU: 0.6670 | Time: 527s
+2026-05-29 16:22:11,800 | INFO     | root:train_model:247 - Epoch 16 | Loss: 0.1400 | mIoU: 0.6975 | Time: 527s
+2026-05-29 16:22:11,943 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6975)
+2026-05-29 16:30:59,684 | INFO     | root:train_model:247 - Epoch 17 | Loss: 0.1333 | mIoU: 0.6985 | Time: 527s
+2026-05-29 16:30:59,795 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.6985)
+2026-05-29 16:39:47,986 | INFO     | root:train_model:247 - Epoch 18 | Loss: 0.1360 | mIoU: 0.6810 | Time: 528s
+2026-05-29 16:48:35,516 | INFO     | root:train_model:247 - Epoch 19 | Loss: 0.1316 | mIoU: 0.7242 | Time: 527s
+2026-05-29 16:48:35,635 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.7242)
+2026-05-29 16:57:23,010 | INFO     | root:train_model:247 - Epoch 20 | Loss: 0.1335 | mIoU: 0.6836 | Time: 527s
+2026-05-29 17:06:11,233 | INFO     | root:train_model:247 - Epoch 21 | Loss: 0.1270 | mIoU: 0.6896 | Time: 528s
+2026-05-29 17:14:58,506 | INFO     | root:train_model:247 - Epoch 22 | Loss: 0.1296 | mIoU: 0.7017 | Time: 527s
+2026-05-29 17:23:45,916 | INFO     | root:train_model:247 - Epoch 23 | Loss: 0.1286 | mIoU: 0.7227 | Time: 527s
+2026-05-29 17:32:33,392 | INFO     | root:train_model:247 - Epoch 24 | Loss: 0.1284 | mIoU: 0.7148 | Time: 527s
+2026-05-29 17:41:20,636 | INFO     | root:train_model:247 - Epoch 25 | Loss: 0.1288 | mIoU: 0.7174 | Time: 527s
+2026-05-29 17:50:07,873 | INFO     | root:train_model:247 - Epoch 26 | Loss: 0.1232 | mIoU: 0.7092 | Time: 527s
+2026-05-29 17:58:55,045 | INFO     | root:train_model:247 - Epoch 27 | Loss: 0.1244 | mIoU: 0.7319 | Time: 526s
+2026-05-29 17:58:55,170 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.7319)
+2026-05-29 18:07:41,837 | INFO     | root:train_model:247 - Epoch 28 | Loss: 0.1246 | mIoU: 0.7070 | Time: 526s
+2026-05-29 18:16:29,016 | INFO     | root:train_model:247 - Epoch 29 | Loss: 0.1228 | mIoU: 0.7229 | Time: 527s
+2026-05-29 18:25:16,892 | INFO     | root:train_model:247 - Epoch 30 | Loss: 0.1228 | mIoU: 0.7430 | Time: 527s
+2026-05-29 18:25:17,018 | INFO     | root:train_model:252 - New best model saved! (mIoU: 0.7430)
+2026-05-29 18:34:03,188 | INFO     | root:train_model:247 - Epoch 31 | Loss: 0.1234 | mIoU: 0.7172 | Time: 526s
+2026-05-29 18:42:50,583 | INFO     | root:train_model:247 - Epoch 32 | Loss: 0.1222 | mIoU: 0.7239 | Time: 527s
+2026-05-29 18:51:40,584 | INFO     | root:train_model:247 - Epoch 33 | Loss: 0.1178 | mIoU: 0.7212 | Time: 529s
+2026-05-29 19:00:28,079 | INFO     | root:train_model:247 - Epoch 34 | Loss: 0.1194 | mIoU: 0.7023 | Time: 527s
+2026-05-29 19:09:15,296 | INFO     | root:train_model:247 - Epoch 35 | Loss: 0.1186 | mIoU: 0.7188 | Time: 527s
+2026-05-29 19:18:02,351 | INFO     | root:train_model:247 - Epoch 36 | Loss: 0.1212 | mIoU: 0.7215 | Time: 526s
+2026-05-29 19:26:52,961 | INFO     | root:train_model:247 - Epoch 37 | Loss: 0.1209 | mIoU: 0.7234 | Time: 530s
+2026-05-29 19:35:40,810 | INFO     | root:train_model:247 - Epoch 38 | Loss: 0.1244 | mIoU: 0.7319 | Time: 527s
+2026-05-29 19:44:29,484 | INFO     | root:train_model:247 - Epoch 39 | Loss: 0.1170 | mIoU: 0.7251 | Time: 528s
+2026-05-29 19:53:17,255 | INFO     | root:train_model:247 - Epoch 40 | Loss: 0.1190 | mIoU: 0.7288 | Time: 527s
+2026-05-29 19:53:17,255 | INFO     | root:train_model:257 - Early stopping triggered after 40 epochs!
+2026-05-29 19:53:17,255 | INFO     | root:train_model:274 - Training complete. Total time: 5:52:38
+2026-05-29 19:53:17,494 | INFO     | root:main:81 - --- EVALUATION ---
+2026-05-29 19:53:17,508 | INFO     | root:evaluate_model:71 - Loaded test set from test_patients.txt
+2026-05-29 19:53:19,064 | INFO     | root:evaluate_model:86 - Loaded weights from best_model.pth
+2026-05-29 19:53:19,080 | INFO     | root:evaluate_model:101 - Scanning for best class-specific examples...
+2026-05-29 19:53:24,186 | INFO     | root:evaluate_model:111 - Fixed vis indices: {1: 331, 2: 283, 3: 556}
+2026-05-29 19:53:24,186 | INFO     | root:evaluate_model:116 - Evaluating on 85 batches...
+2026-05-29 19:53:24,186 | INFO     | root:evaluate_model:117 - Config: MODEL_NAME=nvidia/mit-b2, USE_MULTIMODAL=True, DEVICE=cuda
+2026-05-29 19:56:15,594 | INFO     | root:evaluate_model:267 - Saved visualization to C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-29_13-59-49\predictions.png
+2026-05-29 19:56:16,646 | INFO     | root:evaluate_model:281 - Saved 5 worst failure cases to C:\Users\Student\Documents\python\oct-project\experiments\run_2026-05-29_13-59-49\failures
+2026-05-29 19:56:16,694 | INFO     | root:main:84 - Final mIoU: 0.7529 | Final mDice: 0.8521
+2026-05-29 19:56:16,694 | INFO     | root:main:85 - Final mHD95: 67.3072 | Final mASD: 22.3189
+2026-05-29 19:56:16,694 | INFO     | root:main:96 - Class 1 (IRF) | IoU: 0.5979 | Dice: 0.7483 | HD95: 44.07
+2026-05-29 19:56:16,694 | INFO     | root:main:97 -   Regions GT/Pred: 8.9/4.9 | BP: 0.0128 | Avg Area: 10266.6 px
+2026-05-29 19:56:16,694 | INFO     | root:main:96 - Class 2 (SRF) | IoU: 0.7374 | Dice: 0.8489 | HD95: 86.48
+2026-05-29 19:56:16,694 | INFO     | root:main:97 -   Regions GT/Pred: 1.3/1.6 | BP: 0.0209 | Avg Area: 16132.9 px
+2026-05-29 19:56:16,694 | INFO     | root:main:96 - Class 3 (PED) | IoU: 0.6977 | Dice: 0.8220 | HD95: 71.37
+2026-05-29 19:56:16,694 | INFO     | root:main:97 -   Regions GT/Pred: 1.3/1.5 | BP: 0.0047 | Avg Area: 23202.6 px
+2026-05-29 19:56:16,799 | INFO     | root:main:104 - Pipeline finished.
