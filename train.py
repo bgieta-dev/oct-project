@@ -288,8 +288,13 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                         for b_idx in range(len(preds)):
                             p = preds[b_idx]
                             
-                            # Fetch the ACTUAL raw [0,1] normalized image for reliable masking
+                            # Fetch the ACTUAL raw [0,1] normalized image
                             orig_img = val_ds.get_raw_image(batch_indices[b_idx])
+                            
+                            # Ensure orig_img matches the prediction shape (H, W)
+                            if orig_img.shape != p.shape:
+                                orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]), interpolation=cv2.INTER_LINEAR)
+                            
                             ret_mask = get_retina_mask(orig_img)
                             
                             new_p = np.zeros_like(p)
