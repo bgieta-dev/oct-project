@@ -259,7 +259,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             model.eval()
             total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
             with torch.no_grad():
-                for batch in val_loader:
+                for i, batch in enumerate(val_loader):
                     pixel_values = batch["pixel_values"].to(config.DEVICE)
                     labels = batch["labels"].to(config.DEVICE)
                     with torch.amp.autocast('cuda', enabled=config.USE_AMP):
