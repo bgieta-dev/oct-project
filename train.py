@@ -52,10 +52,8 @@ class BoundaryLoss(torch.nn.Module):
             sdf_numpy = self.compute_sdf(gt_numpy, probs.shape)
             sdf = torch.from_numpy(sdf_numpy).float().to(probs.device)
 
-        # Boundary loss is the product of spatial probabilities and SDF
-        # We want to minimize probabilities in the negative SDF regions (outside GT)
-        # and maximize them in the positive SDF regions (inside GT)
-        loss = probs * sdf
+        # Gated Boundary Loss: Only penalize probabilities outside the GT (positive SDF)
+        loss = probs * torch.clamp(sdf, min=0)
         return loss.mean()
 
 class FocalLoss(torch.nn.Module):
@@ -282,14 +280,17 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                         import cv2
                         cleaned_preds = []
                         kernel = np.ones((3, 3), np.uint8)
-                        # Use first channel (normalized) for anatomical mask estimation
-                        orig_imgs = pixel_values.cpu().numpy()[:, 0, :, :] 
+                        
+                        # Fix: Get indices for this batch to fetch raw images for masking
+                        batch_start = i * config.BATCH_SIZE
+                        batch_indices = list(range(batch_start, min(len(val_ds), batch_start + config.BATCH_SIZE)))
 
                         for b_idx in range(len(preds)):
                             p = preds[b_idx]
                             
-                            # Anatomical retina mask filter
-                            ret_mask = get_retina_mask(orig_imgs[b_idx])
+                            # Fetch the ACTUAL raw [0,1] normalized image for reliable masking
+                            orig_img = val_ds.get_raw_image(batch_indices[b_idx])
+                            ret_mask = get_retina_mask(orig_img)
                             
                             new_p = np.zeros_like(p)
                             for c in range(1, config.NUM_LABELS):

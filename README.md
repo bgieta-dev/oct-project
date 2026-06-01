@@ -68,7 +68,7 @@ Based on the official thesis requirements, the systematic comparison between Seg
 **Setup:** `LR=6e-5` (Official Compliance), **Dropout (0.2)**, **Focal-Tversky Loss**, **Hybrid Warmup-Polynomial Scheduler**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
 **Technical Upgrades (The Full Refinement Suite):**
 
-- **Boundary-Aware Loss:** Integrated a `BoundaryLoss` term to explicitly penalize anatomical distance errors, targeting a reduction in HD95.
+- **Gated Boundary-Aware Loss:** Integrated a refined `BoundaryLoss` term (clamped SDF) to explicitly penalize anatomical distance errors and outliers without interfering with internal region optimization, targeting a major reduction in HD95.
 - **Anatomical Retina Masking:** Implemented an intensity-based "Retina Zone Prior" to mechanically eliminate False Positives in the vitreous and sclera.
 - **IRF Detection Boost:** 
     - Extended Multi-Scale TTA to **1.5x** to magnify microscopic cysts.

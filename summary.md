@@ -18,7 +18,7 @@ This document provides the technical rationale and engineering decisions behind 
 *   **Hybrid Focal-Tversky:** 
     *   **Focal:** Lowers the loss weight for "easy" background pixels, forcing the network to focus on "hard" fluid boundaries.
     *   **Tversky ($\beta=0.7$):** Specifically penalizes False Negatives, making the model more sensitive to microscopic fluid regions.
-*   **Boundary Loss:** Introduced to directly optimize the **HD95** metric. It penalizes the spatial distance between the predicted edge and the ground truth, ensuring segments align with anatomical layers.
+*   **Gated Boundary Loss:** Introduced a refined version of boundary-aware optimization. By clamping the distance field to non-negative values, the loss term acts exclusively as a penalty for False Positives and distance errors, preventing it from interfering with the internal region optimization handled by the Tversky loss. This directly optimizes the **HD95** metric by enforcing strict anatomical boundaries.
 
 ## 4. Clinical Edge Fidelity: Selective Smoothing
 *   **The Smoothing Dilemma:** Standard morphological operations (OPEN) smooth boundaries globally, which is correct for rounded **IRF** cysts but incorrect for **PED** and **SRF**, which have sharp "spiky" angles of detachment.

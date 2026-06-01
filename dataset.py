@@ -28,6 +28,16 @@ class OCTDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
+    def get_raw_image(self, idx: int) -> np.ndarray:
+        """Returns [0, 1] normalized single-slice (L) image for anatomical masking"""
+        img_path = self.image_paths[idx]
+        img_p = Image.open(img_path).convert("L")
+        img_n = np.array(img_p).astype(np.float32)
+        p1, p99 = np.percentile(img_n, (1, 99))
+        img_n = np.clip(img_n, p1, p99)
+        img_n = (img_n - p1) / (p99 - p1 + 1e-8)
+        return img_n
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         img_path = self.image_paths[idx]
         skip_norm = False
