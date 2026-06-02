@@ -63,10 +63,17 @@ class FocalLoss(torch.nn.Module):
         self.gamma = gamma
         self.reduction = reduction
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs, targets, mask=None):
         ce_loss = torch.nn.functional.cross_entropy(inputs, targets, weight=self.alpha, reduction='none')
         pt = torch.exp(-ce_loss)
         focal_loss = (1 - pt)**self.gamma * ce_loss
+        
+        if mask is not None:
+            focal_loss = focal_loss * mask
+            if self.reduction == 'mean':
+                # Only average over the unmasked, active pixels
+                return focal_loss.sum() / (mask.sum() + 1e-8)
+                
         if self.reduction == 'mean': return focal_loss.mean()
         elif self.reduction == 'sum': return focal_loss.sum()
         else: return focal_loss
