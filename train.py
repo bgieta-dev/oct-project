@@ -92,6 +92,9 @@ class TverskyLoss(torch.nn.Module):
         fp = torch.sum(pred * (1 - target_one_hot), dims)
         fn = torch.sum((1 - pred) * target_one_hot, dims)
         
+        # When masking, the sum of pixels isn't the whole image.
+        # But Tversky is ratio-based (Intersection / (Intersection + alpha*FP + beta*FN))
+        # Zeroed pixels won't contribute to TP, FP, or FN.
         tversky = (tp + 1e-6) / (tp + self.alpha * fp + self.beta * fn + 1e-6)
         return 1 - tversky.mean()
 
@@ -194,14 +197,14 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
     warmup_epochs = getattr(config, "WARMUP_EPOCHS", 5)
     
-    # Hybrid Scheduler: Linear Warmup + Polynomial Decay (power=1.0)
-    # Aligned with official requirements and original SegFormer specification
+    # Hybrid Scheduler: Linear Warmup + Polynomial Decay (power=0.9)
+    # Aligned with official SegFormer specification (poly decay power 0.9)
     def lr_lambda(current_step):
         if current_step < warmup_epochs:
             return float(current_step) / float(max(1, warmup_epochs))
         # Polynomial decay: (1 - (step - warmup) / (total - warmup)) ^ power
         progress = float(current_step - warmup_epochs) / float(max(1, epochs - warmup_epochs))
-        return max(0.0, (1.0 - progress) ** 1.0)
+        return max(0.0, (1.0 - progress) ** 0.9)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
@@ -246,7 +249,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 
                 # Apply anatomical mask to focus focal loss
                 # We use a weighted cross-entropy style masking
-                main_loss = focal_criterion(logits, labels)
+                main_loss = focal_criterion(logits, labels, mask=ret_masks)
                 
                 # Apply direct masking to Tversky and Boundary Loss
                 probs = F.softmax(logits, dim=1)
