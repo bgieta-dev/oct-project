@@ -1,0 +1,81 @@
+2026-06-01 19:28:20,964 | INFO     | root:main:60 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-06-01_19-28-20
+2026-06-01 19:28:20,967 | INFO     | root:main:63 - Device: NVIDIA GeForce RTX 3060
+2026-06-01 19:28:20,967 | INFO     | root:main:65 - GPU Memory: 12.00 GB
+2026-06-01 19:28:20,968 | INFO     | root:main:69 - --- TRAINING ---
+2026-06-01 19:28:20,981 | INFO     | root:train_model:124 - Split: Train=56, Val=7, Test=7
+2026-06-01 19:28:21,049 | INFO     | root:calculate_dynamic_weights:103 - Calculating dynamic class weights...
+2026-06-01 19:28:26,271 | INFO     | root:train_model:141 - Dynamic weights: [0.00921245 1.03819163 1.54269683 1.40989909]
+2026-06-01 19:28:26,344 | WARNING  | py.warnings:_showwarnmsg:109 - C:\Users\Student\Documents\python\oct-project\train.py:156: UserWarning: Argument(s) 'alpha_affine' are not valid for transform ElasticTransform
+  A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=1.0),
+
+2026-06-01 19:28:26,819 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-06-01 19:28:28,813 | INFO     | root:train_model:213 - Starting training for 80 epochs...
+2026-06-01 19:39:46,966 | INFO     | root:train_model:340 - Epoch 1 | Loss: 1.1015 | mIoU: 0.2157 | Time: 678s
+2026-06-01 19:39:47,094 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.2157)
+2026-06-01 19:51:06,529 | INFO     | root:train_model:340 - Epoch 2 | Loss: 0.9388 | mIoU: 0.2116 | Time: 679s
+2026-06-01 20:02:25,917 | INFO     | root:train_model:340 - Epoch 3 | Loss: 0.6000 | mIoU: 0.2265 | Time: 679s
+2026-06-01 20:02:26,056 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.2265)
+2026-06-01 20:13:48,258 | INFO     | root:train_model:340 - Epoch 4 | Loss: 0.4823 | mIoU: 0.2906 | Time: 682s
+2026-06-01 20:13:48,394 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.2906)
+2026-06-01 20:25:09,788 | INFO     | root:train_model:340 - Epoch 5 | Loss: 0.4166 | mIoU: 0.3323 | Time: 681s
+2026-06-01 20:25:09,918 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.3323)
+2026-06-01 20:36:29,702 | INFO     | root:train_model:340 - Epoch 6 | Loss: 0.3681 | mIoU: 0.3784 | Time: 679s
+2026-06-01 20:36:29,826 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.3784)
+2026-06-01 20:47:50,284 | INFO     | root:train_model:340 - Epoch 7 | Loss: 0.3279 | mIoU: 0.4176 | Time: 680s
+2026-06-01 20:47:50,415 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.4176)
+2026-06-01 20:59:09,026 | INFO     | root:train_model:340 - Epoch 8 | Loss: 0.2953 | mIoU: 0.4341 | Time: 678s
+2026-06-01 20:59:09,147 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.4341)
+2026-06-01 21:10:27,157 | INFO     | root:train_model:340 - Epoch 9 | Loss: 0.2613 | mIoU: 0.4678 | Time: 677s
+2026-06-01 21:10:27,278 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.4678)
+2026-06-01 21:21:46,540 | INFO     | root:train_model:340 - Epoch 10 | Loss: 0.2196 | mIoU: 0.6195 | Time: 679s
+2026-06-01 21:21:46,676 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.6195)
+2026-06-01 21:33:05,615 | INFO     | root:train_model:340 - Epoch 11 | Loss: 0.1947 | mIoU: 0.5816 | Time: 678s
+2026-06-01 21:44:24,520 | INFO     | root:train_model:340 - Epoch 12 | Loss: 0.1801 | mIoU: 0.6453 | Time: 678s
+2026-06-01 21:44:24,643 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.6453)
+2026-06-01 21:55:43,753 | INFO     | root:train_model:340 - Epoch 13 | Loss: 0.1672 | mIoU: 0.6374 | Time: 678s
+2026-06-01 22:07:02,329 | INFO     | root:train_model:340 - Epoch 14 | Loss: 0.1632 | mIoU: 0.6717 | Time: 678s
+2026-06-01 22:07:02,451 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.6717)
+2026-06-01 22:18:22,985 | INFO     | root:train_model:340 - Epoch 15 | Loss: 0.1545 | mIoU: 0.6842 | Time: 680s
+2026-06-01 22:18:23,112 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.6842)
+2026-06-01 22:30:03,164 | INFO     | root:train_model:340 - Epoch 16 | Loss: 0.1512 | mIoU: 0.6616 | Time: 699s
+2026-06-01 22:41:22,527 | INFO     | root:train_model:340 - Epoch 17 | Loss: 0.1458 | mIoU: 0.6740 | Time: 679s
+2026-06-01 22:52:42,905 | INFO     | root:train_model:340 - Epoch 18 | Loss: 0.1456 | mIoU: 0.7010 | Time: 680s
+2026-06-01 22:52:43,027 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.7010)
+2026-06-01 23:04:01,751 | INFO     | root:train_model:340 - Epoch 19 | Loss: 0.1437 | mIoU: 0.6776 | Time: 678s
+2026-06-01 23:15:20,670 | INFO     | root:train_model:340 - Epoch 20 | Loss: 0.1396 | mIoU: 0.7106 | Time: 678s
+2026-06-01 23:15:20,794 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.7106)
+2026-06-01 23:26:40,256 | INFO     | root:train_model:340 - Epoch 21 | Loss: 0.1386 | mIoU: 0.7274 | Time: 679s
+2026-06-01 23:26:40,389 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.7274)
+2026-06-01 23:38:03,708 | INFO     | root:train_model:340 - Epoch 22 | Loss: 0.1376 | mIoU: 0.7041 | Time: 683s
+2026-06-01 23:49:23,284 | INFO     | root:train_model:340 - Epoch 23 | Loss: 0.1339 | mIoU: 0.7269 | Time: 679s
+2026-06-02 00:00:43,702 | INFO     | root:train_model:340 - Epoch 24 | Loss: 0.1317 | mIoU: 0.7181 | Time: 680s
+2026-06-02 00:12:04,501 | INFO     | root:train_model:340 - Epoch 25 | Loss: 0.1313 | mIoU: 0.7431 | Time: 680s
+2026-06-02 00:12:04,631 | INFO     | root:train_model:345 - New best model saved! (mIoU: 0.7431)
+2026-06-02 00:24:14,106 | INFO     | root:train_model:340 - Epoch 26 | Loss: 0.1278 | mIoU: 0.7073 | Time: 729s
+2026-06-02 00:35:33,083 | INFO     | root:train_model:340 - Epoch 27 | Loss: 0.1298 | mIoU: 0.7348 | Time: 678s
+2026-06-02 00:46:53,601 | INFO     | root:train_model:340 - Epoch 28 | Loss: 0.1341 | mIoU: 0.7123 | Time: 680s
+2026-06-02 00:58:11,964 | INFO     | root:train_model:340 - Epoch 29 | Loss: 0.1273 | mIoU: 0.7242 | Time: 678s
+2026-06-02 01:10:24,010 | INFO     | root:train_model:340 - Epoch 30 | Loss: 0.1292 | mIoU: 0.7332 | Time: 731s
+2026-06-02 01:21:42,861 | INFO     | root:train_model:340 - Epoch 31 | Loss: 0.1277 | mIoU: 0.7404 | Time: 678s
+2026-06-02 01:33:01,839 | INFO     | root:train_model:340 - Epoch 32 | Loss: 0.1304 | mIoU: 0.7269 | Time: 678s
+2026-06-02 01:44:20,855 | INFO     | root:train_model:340 - Epoch 33 | Loss: 0.1260 | mIoU: 0.7189 | Time: 678s
+2026-06-02 01:55:39,601 | INFO     | root:train_model:340 - Epoch 34 | Loss: 0.1226 | mIoU: 0.7201 | Time: 678s
+2026-06-02 02:06:57,764 | INFO     | root:train_model:340 - Epoch 35 | Loss: 0.1235 | mIoU: 0.7366 | Time: 678s
+2026-06-02 02:06:57,764 | INFO     | root:train_model:350 - Early stopping triggered after 35 epochs!
+2026-06-02 02:06:57,764 | INFO     | root:train_model:367 - Training complete. Total time: 6:38:28
+2026-06-02 02:06:58,045 | INFO     | root:main:81 - --- EVALUATION ---
+Notes:
+- UNEXPECTED:   can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+- MISSING:      those params were newly initialized because missing from the checkpoint. Consider training on your downstream task.
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/commits/main "HTTP/1.1 200 OK"
+INFO:root:Loaded weights from best_model.pth
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/discussions?p=0 "HTTP/1.1 200 OK"
+INFO:root:Model Parameters: 27.35M
+INFO:root:Scanning for best class-specific examples...
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/commits/refs%2Fpr%2F2 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/refs%2Fpr%2F2/model.safetensors.index.json "HTTP/1.1 404 Not Found"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/refs%2Fpr%2F2/model.safetensors "HTTP/1.1 302 Found"
+INFO:root:Fixed vis indices: {1: 331, 2: 283, 3: 556}
+INFO:root:Evaluating on 85 batches...
+INFO:root:Config: MODEL_NAME=nvidia/mit-b2, USE_MULTIMODAL=True, DEVICE=cuda
+{'params': 27.3497, 'mIoU': np.float64(0.7340754999888714), 'mDice': np.float64(0.8381599957086001), 'class_ious': {0: np.float64(0.9775160164972043), 1: np.float64(0.5743368731374523), 2: np.float64(0.7396953873766601), 3: np.float64(0.6447537229441692)}, 'class_dices': {0: np.float64(0.9886301889262966), 1: np.float64(0.7296238599720684), 2: np.float64(0.850373453587262), 3: np.float64(0.784012480348774)}, 'class_hd95': {1: np.float64(43.43383254123755), 2: np.float64(84.60224054645509), 3: np.float64(73.7087850503211)}, 'class_asd': {1: np.float64(8.437746099448974), 2: np.float64(34.682248256124055), 3: np.float64(24.78951807394116)}, 'class_avg_regions_gt': {1: np.float64(8.9375), 2: np.float64(1.2727272727272727), 3: np.float64(1.304635761589404)}, 'class_avg_regions_pred': {1: np.float64(4.168458781362007), 2: np.float64(1.6211453744493391), 3: np.float64(1.7379679144385027)}, 'class_boundary_precision': {1: np.float64(6.090474275451722), 2: np.float64(8.225246949879207), 3: np.float64(4.4129274141181885)}, 'class_avg_pixel_area': {1: np.float64(10266.62109375), 2: np.float64(16132.856459330143), 3: np.float64(23202.582781456953)}, 'mHD95': np.float64(67.24828604600458), 'mASD': np.float64(22.636504143171397)}
