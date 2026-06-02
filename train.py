@@ -260,14 +260,15 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 main_loss = focal_criterion(logits, labels, mask=ret_masks)
                 
                 # Apply direct masking to Tversky and Boundary Loss
-                probs = F.softmax(logits, dim=1)
                 if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
-                    aux_loss = tversky_criterion(probs, labels, mask=ret_masks)
+                    # Passing logits now, TverskyLoss handles softmax internally
+                    aux_loss = tversky_criterion(logits, labels, mask=ret_masks)
                 else:
                     aux_loss = dice_loss(logits, labels)
                 
                 # Boundary Loss Integration with Anatomical Masking
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
+                    probs = F.softmax(logits, dim=1)
                     b_loss = boundary_criterion(probs * ret_masks.unsqueeze(1), labels)
                     
                     # Adaptive Boundary Annealing: 
@@ -278,9 +279,19 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 
                 loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             
+            # Check for invalid loss before backward
+            if torch.isnan(loss) or torch.isinf(loss):
+                logging.warning(f"Invalid loss detected at epoch {epoch+1}, batch {i}. Skipping batch.")
+                optimizer.zero_grad()
+                continue
+
             scaler.scale(loss).backward()
             
             if (i + 1) % config.ACCUMULATION_STEPS == 0:
+                # Gradient Clipping for stability
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
