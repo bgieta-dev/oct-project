@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from train import train_model
 from eval import evaluate_model
+from attention_visualizer import generate_attention_maps
 import config
 
 def send_discord_notification(message):
@@ -96,6 +97,11 @@ def main():
         area = metrics['class_avg_pixel_area'][c]
         logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f}")
         logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
+
+    # generate attention maps
+    logging.info("--- ATTENTION VISUALIZATION ---")
+    att_dir = os.path.join(exp_dir, "attention_maps")
+    generate_attention_maps(model_path=best_model_name, output_dir=att_dir)
 
     # archiving project docs and scripts
     for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]:

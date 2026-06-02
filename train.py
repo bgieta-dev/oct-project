@@ -72,16 +72,21 @@ class FocalLoss(torch.nn.Module):
         else: return focal_loss
 
 class TverskyLoss(torch.nn.Module):
-    def __init__(self, alpha=0.3, beta=0.7, num_classes=config.NUM_LABELS):
+    def __init__(self, alpha=getattr(config, "TVERSKY_ALPHA", 0.3), beta=getattr(config, "TVERSKY_BETA", 0.7), num_classes=config.NUM_LABELS):
         super(TverskyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta
         self.num_classes = num_classes
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, mask=None):
         pred = torch.softmax(pred, dim=1)
         target_one_hot = torch.nn.functional.one_hot(target, self.num_classes).permute(0, 3, 1, 2).float()
         
+        if mask is not None:
+            mask = mask.unsqueeze(1) # (B, 1, H, W)
+            pred = pred * mask
+            target_one_hot = target_one_hot * mask
+
         dims = (0, 2, 3)
         tp = torch.sum(pred * target_one_hot, dims)
         fp = torch.sum(pred * (1 - target_one_hot), dims)
@@ -229,13 +234,13 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
                 
-                main_loss = 0.5 * focal_criterion(logits, labels)
+                main_loss = focal_criterion(logits, labels)
                 if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
                     # Tversky loss should take probabilities for consistency with Boundary loss
                     probs = F.softmax(logits, dim=1)
-                    aux_loss = 0.5 * tversky_criterion(probs, labels)
+                    aux_loss = tversky_criterion(probs, labels)
                 else:
-                    aux_loss = 0.5 * dice_loss(logits, labels)
+                    aux_loss = dice_loss(logits, labels)
                 
                 # Boundary Loss Integration with Adaptive Annealing
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
@@ -365,6 +370,18 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         plt.figure(figsize=(12, 5))
         plt.subplot(1, 2, 1)
         plt.plot(history["loss"]); plt.title("Loss History"); plt.xlabel("Epoch"); plt.ylabel("Loss")
+        plt.subplot(1, 2, 2)
+        plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "metrics.png"))
+        plt.close()
+
+    logging.info(f"Training complete. Total time: {str(timedelta(seconds=int(time.time() - start_time)))}")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    train_model()
+s")
         plt.subplot(1, 2, 2)
         plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
         plt.tight_layout()

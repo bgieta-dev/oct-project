@@ -60,16 +60,39 @@ Based on the official thesis requirements, the systematic comparison between Seg
 
 ---
 
-### 2026-06-02 (test13 - THE GRAND SYNTHESIS - PLANNED)
+### 2026-06-02 (test14 - THE ANATOMICAL MASTER PLAN - IN PROGRESS)
 **Model:** SegFormer (**nvidia/mit-b2**)
-**Objective:** Surpass the 0.75 mIoU record while maintaining the 43.43 HD95 edge precision through Loss Annealing and hard-example mining.
-**Setup:** `LR=6e-5`, **Dropout (0.2)**, **Gated Boundary Loss (Annealed)**, **Focal Boost (Gamma 3.0)**, **Hybrid Scheduler**, **Patience (15)**, Multi-scale TTA.
+**Objective:** Final clinical refinement focusing on anatomical priority and boundary salience to break the 0.75 mIoU barrier.
+**Key Changes & Rationale:**
+- **Anatomical Loss Masking (Retina-Only):** 
+    - *Action:* Integrated dynamic retina masking into the training loop.
+    - *Why:* Forces `Tversky` and `Boundary Loss` to ignore non-anatomical noise (vitreous/sclera). Model capacity is now dedicated 100% to retinal tissue, improving detection of microscopic IRF.
+- **Synchronized Tversky Optimization (Beta=0.8):** 
+    - *Action:* Fixed parameter pass-through in `train.py`.
+    - *Why:* Prioritizes Recall (minimizing False Negatives) for IRF/SRF, ensuring clinical safety in biomarker detection.
+- **CLAHE Integration (Contrast Boost):** 
+    - *Action:* Enabled `USE_CLAHE` in config.
+    - *Why:* Sharpens the fluid-tissue interface, directly aiding the `Boundary Loss` in reducing HD95 outliers.
+- **Refined Regularization:** `Dropout (0.1)` and `Warmup (5)` for faster convergence on the cleaned multi-modal signal.
+- **ElasticTransform Fix:** Removed legacy `alpha_affine` to ensure stable spatial augmentations.
 
-**Key Upgrades:**
-- **Synchronized Data Pipeline:** Fully aligned CLAHE and Resize transforms across training, validation, and final evaluation to eliminate domain shift during testing.
-- **Boundary Annealing:** Gradually introduce boundary penalties (weight: 0.01 -> 0.1) to allow the model to prioritize detection (mIoU) in the early phase and anatomical precision (HD95) in the late phase.
-- **Focal Gamma Boost (3.0):** Increased focus on the hardest clinical pixels to maximize IRF recall.
-- **Optimized TTA Scales:** Adjusted to `[0.75, 1.0, 1.25, 1.5]` to capture both wide contextual detachments and microscopic cysts.
+---
+
+### 2026-06-02 (test13 - THE GRAND SYNTHESIS - REGRESSION)
+**Model:** SegFormer (**nvidia/mit-b2**)
+**Results:** Final mIoU: **0.7186**, mDice: 0.8273
+**Status:** **Failed - Performance Drop.**
+**Observations:** 
+- **Conflict of Context:** 2.5D logic (adjacent slices) provided blurred spatial signals that interfered with the `Boundary Loss` gradients, which rely on sharp edges.
+- **Aggressive Weighting:** Focal Gamma 3.0 and high Dropout (0.2) caused the model to underfit the fluid regions, leading to the IoU drop.
+- **Successful Component:** `Boundary Loss` remains a valid tool, but it requires the high-frequency information from **Multi-modal** inputs rather than the low-frequency context of **2.5D**.
+**Conclusion:** Re-stabilize using Test 12's loss strategy but with the improved multi-modal data pipeline.
+
+**Technical Setup:**
+- **Synchronized Data Pipeline:** Fully aligned CLAHE and Resize transforms.
+- **Boundary Annealing:** Gradually introduced boundary penalties (weight: 0.01 -> 0.1).
+- **Focal Gamma Boost (3.0):** Increased focus on the hardest clinical pixels.
+- **Optimized TTA Scales:** `[0.75, 1.0, 1.25, 1.5]`.
 
 ---
 
