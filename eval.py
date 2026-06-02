@@ -49,7 +49,7 @@ def get_retina_mask(img):
     # 0.03 is a safe floor for RETOUCH normalized scans
     mask_rows = row_means > 0.03
     
-    retina_mask = np.zeros_like(img, dtype=np.uint8)
+    retina_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
     if np.any(mask_rows):
         # Find first and last rows with signal
         rows = np.where(mask_rows)[0]
