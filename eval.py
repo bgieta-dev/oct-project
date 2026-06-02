@@ -226,8 +226,34 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 # Average all TTA passes
                 logits = torch.mean(torch.stack(all_logits), dim=0)
 
-            # Threshold-based assignment instead of simple argmax
+            # Edge-Aware Bilateral Smoothing (Soft-CRF Equivalent)
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
+            
+            # Apply bilateral filter to probabilities guided by the original OCT image
+            if getattr(config, "USE_SOFT_CRF", True):
+                smoothed_probs = np.zeros_like(probs_batch)
+                for b_idx in range(len(probs_batch)):
+                    # Get anatomical guidance image
+                    guide_img = orig_img_batch[b_idx]
+                    if len(guide_img.shape) == 3:
+                        guide_img = guide_img[:, :, 1] # Take central slice if 2.5D
+                    guide_uint8 = (guide_img * 255).astype(np.uint8)
+                    
+                    # Smooth class probabilities guided by the OCT scan
+                    for c in range(config.NUM_LABELS):
+                        # Anatomical Constraint: Only smooth Background (0) and IRF cysts (1).
+                        # SRF (2) and PED (3) often have naturally sharp, "spiky" detachments.
+                        if c in [0, 1]:
+                            prob_uint8 = (probs_batch[b_idx, c] * 255).astype(np.uint8)
+                            smoothed_prob = cv2.bilateralFilter(prob_uint8, d=9, sigmaColor=75, sigmaSpace=75)
+                            smoothed_probs[b_idx, c] = smoothed_prob.astype(np.float32) / 255.0
+                        else:
+                            smoothed_probs[b_idx, c] = probs_batch[b_idx, c]
+                
+                # Re-normalize probabilities
+                smoothed_probs = smoothed_probs / (smoothed_probs.sum(axis=1, keepdims=True) + 1e-8)
+                probs_batch = smoothed_probs
+
             preds_batch = np.zeros(probs_batch.shape[0:1] + probs_batch.shape[2:], dtype=np.uint8)
             
             # Default thresholds or from config

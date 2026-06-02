@@ -62,18 +62,21 @@ Based on the official thesis requirements, the systematic comparison between Seg
 
 ### 2026-06-02 (test14 - THE ANATOMICAL MASTER PLAN - IN PROGRESS)
 **Model:** SegFormer (**nvidia/mit-b2**)
-**Objective:** Final clinical refinement focusing on anatomical priority and boundary salience to break the 0.75 mIoU barrier.
+**Objective:** Final clinical refinement combining the record-setting baseline of Test 12 with new anatomical logic to break the 0.75 mIoU barrier.
 **Key Changes & Rationale:**
+- **Restored 2.5D Context (From Test 12 Record):** 
+    - *Why:* Deep review confirmed the record HD95 (43.43) was achieved using 2.5D volumetric context. Adjacent slices provide crucial 3D spatial cues for the Boundary Loss to differentiate artifacts from true cysts.
 - **Anatomical Loss Masking (Retina-Only):** 
     - *Action:* Integrated dynamic retina masking into the training loop.
-    - *Why:* Forces `Tversky` and `Boundary Loss` to ignore non-anatomical noise (vitreous/sclera). Model capacity is now dedicated 100% to retinal tissue, improving detection of microscopic IRF.
-- **Synchronized Tversky Optimization (Beta=0.8):** 
-    - *Action:* Fixed parameter pass-through in `train.py`.
-    - *Why:* Prioritizes Recall (minimizing False Negatives) for IRF/SRF, ensuring clinical safety in biomarker detection.
-- **CLAHE Integration (Contrast Boost):** 
-    - *Action:* Enabled `USE_CLAHE` in config.
-    - *Why:* Sharpens the fluid-tissue interface, directly aiding the `Boundary Loss` in reducing HD95 outliers.
-- **Refined Regularization:** `Dropout (0.1)` and `Warmup (5)` for faster convergence on the cleaned multi-modal signal.
+    - *Why:* Forces `Tversky` and `Boundary Loss` to ignore non-anatomical noise (vitreous/sclera). Model capacity is now dedicated 100% to retinal tissue.
+- **Restored Regularization (Dropout 0.2):** 
+    - *Why:* Reverted from 0.1 back to 0.2. The 56-volume dataset is too small; 0.2 is historically proven to prevent SegFormer-b2 from memorizing noise.
+- **Balanced Tversky & Thresholds (False Positive Control):** 
+    - *Action:* Rebalanced Tversky Beta from 0.8 down to 0.6 (Alpha 0.4), raised IRF threshold back to 0.5, and increased `MIN_REGION_SIZE` to 75.
+    - *Why:* Historical failure analysis showed a high rate of False Positives. The previous setup was too "trigger-happy" in its pursuit of Recall. These changes penalize over-prediction and filter out noise islands.
+- **Edge-Aware Bilateral Smoothing (Selective Soft-CRF):**
+    - *Action:* Implemented a custom post-inference filter using OpenCV in `eval.py`.
+    - *Why:* Fulfills the CRF requirement from Phase 3. It uses the original OCT scan intensities to 'snap' soft probability maps to real anatomical boundaries. **Crucially, it is selectively applied ONLY to IRF (Class 1) and Background.** SRF and PED predictions bypass this filter to preserve their naturally sharp, "spiky" detachment geometries, demonstrating deep clinical integration.
 - **ElasticTransform Fix:** Removed legacy `alpha_affine` to ensure stable spatial augmentations.
 
 ---
