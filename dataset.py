@@ -38,6 +38,10 @@ class OCTDataset(Dataset):
         img_n = (img_n - p1) / (p99 - p1 + 1e-8)
         return img_n
 
+    def get_raw_mask(self, idx: int) -> np.ndarray:
+        """Returns raw mask as numpy array"""
+        return np.array(Image.open(self.mask_paths[idx]))
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         img_path = self.image_paths[idx]
         skip_norm = False
