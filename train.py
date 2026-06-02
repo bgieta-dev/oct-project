@@ -158,7 +158,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         A.HorizontalFlip(p=config.AUG_PROBS["flip"]),
         A.Rotate(limit=10, p=config.AUG_PROBS["rotate"]),
         A.OneOf([
-            A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=1.0),
+            A.ElasticTransform(alpha=1, sigma=50, p=1.0),
             A.GridDistortion(num_steps=5, distort_limit=0.3, p=1.0)
         ], p=0.4),
         A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
@@ -192,7 +192,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 15)
+    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 5)
     
     # Hybrid Scheduler: Linear Warmup + Polynomial Decay (power=1.0)
     # Aligned with official requirements and original SegFormer specification
@@ -207,7 +207,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
-    tversky_criterion = TverskyLoss(alpha=0.3, beta=0.7)
+    tversky_criterion = TverskyLoss()
     boundary_criterion = BoundaryLoss()
 
     best_miou = 0.0
@@ -228,24 +228,36 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             pixel_values = batch["pixel_values"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
             
+            # Extract anatomical retina mask from the original image (pre-normalized)
+            # This forces the loss to ignore vitreous/sclera noise
+            with torch.no_grad():
+                # batch["orig_img"] is (B, H, W, 3) - use middle channel (original)
+                orig_imgs = batch["orig_img"][:, :, :, 1].cpu().numpy()
+                ret_masks = []
+                for b in range(orig_imgs.shape[0]):
+                    ret_masks.append(get_retina_mask(orig_imgs[b]))
+                ret_masks = torch.from_numpy(np.array(ret_masks)).to(config.DEVICE).float()
+
             with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = torch.nn.functional.interpolate(
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
                 
+                # Apply anatomical mask to focus focal loss
+                # We use a weighted cross-entropy style masking
                 main_loss = focal_criterion(logits, labels)
+                
+                # Apply direct masking to Tversky and Boundary Loss
+                probs = F.softmax(logits, dim=1)
                 if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
-                    # Tversky loss should take probabilities for consistency with Boundary loss
-                    probs = F.softmax(logits, dim=1)
-                    aux_loss = tversky_criterion(probs, labels)
+                    aux_loss = tversky_criterion(probs, labels, mask=ret_masks)
                 else:
                     aux_loss = dice_loss(logits, labels)
                 
-                # Boundary Loss Integration with Adaptive Annealing
+                # Boundary Loss Integration with Anatomical Masking
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
-                    probs = F.softmax(logits, dim=1)
-                    b_loss = boundary_criterion(probs, labels)
+                    b_loss = boundary_criterion(probs * ret_masks.unsqueeze(1), labels)
                     
                     # Adaptive Boundary Annealing: 
                     # Start with low boundary weight (0.01) and grow to 0.1 as training progresses
@@ -370,18 +382,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         plt.figure(figsize=(12, 5))
         plt.subplot(1, 2, 1)
         plt.plot(history["loss"]); plt.title("Loss History"); plt.xlabel("Epoch"); plt.ylabel("Loss")
-        plt.subplot(1, 2, 2)
-        plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, "metrics.png"))
-        plt.close()
-
-    logging.info(f"Training complete. Total time: {str(timedelta(seconds=int(time.time() - start_time)))}")
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    train_model()
-s")
         plt.subplot(1, 2, 2)
         plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
         plt.tight_layout()
