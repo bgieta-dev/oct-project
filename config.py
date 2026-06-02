@@ -27,8 +27,8 @@ USE_TVERSKY = True # Use Tversky Loss instead of Dice Loss
 USE_FOCAL_TVERSKY = True # Combine Focal with Tversky for extreme focus
 USE_BOUNDARY_LOSS = True # Explicitly optimize spatial boundary distance
 BOUNDARY_ALPHA = 0.1     # Weight for boundary loss term
-USE_CLAHE = True # Use CLAHE for contrast enhancement
-FOCAL_GAMMA = 3.0 # Higher gamma to focus on difficult boundaries
+# Higher gamma to focus on difficult boundaries
+FOCAL_GAMMA = 3.0 
 DROPOUT_RATE = 0.2 # Regularization to prevent overfitting
 WARMUP_EPOCHS = 15 # Extended warmup to stabilize spatial augmentations
 
@@ -42,7 +42,8 @@ CLASS_WEIGHTS = [0.2, 5.0, 2.0, 2.0] # Fallback weights
 
 # Evaluation
 USE_TTA = True # Test-Time Augmentation
-TTA_SCALES = [0.8, 1.0, 1.2, 1.5] # Multi-scale inference
+TTA_SCALES = [0.75, 1.0, 1.25, 1.5] # Optimized scales for Test 13
+
 CLASS_THRESHOLDS = {1: 0.35, 2: 0.5, 3: 0.5} # Lower threshold for IRF to boost recall
 
 

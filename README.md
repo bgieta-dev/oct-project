@@ -60,20 +60,40 @@ Based on the official thesis requirements, the systematic comparison between Seg
 
 ---
 
-## Experiments
-
-### 2026-06-01 (test12 - THE CLINICAL FINAL - Planned/In Progress)
+### 2026-06-02 (test13 - THE GRAND SYNTHESIS - PLANNED)
 **Model:** SegFormer (**nvidia/mit-b2**)
-**Objective:** Achieve the definitive clinical-grade segmentation by optimizing the HD95 metric and boosting the recall of small fluid structures (IRF).
-**Setup:** `LR=6e-5` (Official Compliance), **Dropout (0.2)**, **Focal-Tversky Loss**, **Hybrid Warmup-Polynomial Scheduler**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
-**Technical Upgrades (The Full Refinement Suite):**
+**Objective:** Surpass the 0.75 mIoU record while maintaining the 43.43 HD95 edge precision through Loss Annealing and hard-example mining.
+**Setup:** `LR=6e-5`, **Dropout (0.2)**, **Gated Boundary Loss (Annealed)**, **Focal Boost (Gamma 3.0)**, **Hybrid Scheduler**, **Patience (15)**, Multi-scale TTA.
 
-- **Gated Boundary-Aware Loss:** Integrated a refined `BoundaryLoss` term (clamped SDF) to explicitly penalize anatomical distance errors and outliers without interfering with internal region optimization, targeting a major reduction in HD95.
-- **Anatomical Retina Masking:** Implemented an intensity-based "Retina Zone Prior" to mechanically eliminate False Positives in the vitreous and sclera.
-- **IRF Detection Boost:** 
-    - Extended Multi-Scale TTA to **1.5x** to magnify microscopic cysts.
-    - Implemented **Class-Specific Thresholding** (IRF threshold lowered to **0.35**) to prioritize fluid recall.
-- **Selective Anatomical Smoothing:** Refined morphological post-processing. Applied smoothing (`OPEN`) only to naturally rounded structures (**IRF**), while preserving the sharp, "spiky" clinical boundaries of **PED** and **SRF** by using only the `CLOSE` operation.
+**Key Upgrades:**
+- **Synchronized Data Pipeline:** Fully aligned CLAHE and Resize transforms across training, validation, and final evaluation to eliminate domain shift during testing.
+- **Boundary Annealing:** Gradually introduce boundary penalties (weight: 0.01 -> 0.1) to allow the model to prioritize detection (mIoU) in the early phase and anatomical precision (HD95) in the late phase.
+- **Focal Gamma Boost (3.0):** Increased focus on the hardest clinical pixels to maximize IRF recall.
+- **Optimized TTA Scales:** Adjusted to `[0.75, 1.0, 1.25, 1.5]` to capture both wide contextual detachments and microscopic cysts.
+
+---
+
+### 2026-06-01 (test12 - THE CLINICAL FINAL - COMPLETED)
+**Model:** SegFormer (**nvidia/mit-b2**) - 27.35M parameters.
+**Status:** **Best Clinical Balance.**
+**Objective:** Achieve definitive clinical-grade segmentation by optimizing the HD95 metric and boosting the recall of small fluid structures (IRF).
+**Setup:** `LR=6e-5` (Official Compliance), **Dropout (0.2)**, **Gated Boundary Loss**, **Hybrid Warmup-Polynomial Scheduler**, **2.5D Motion-Compensated Input**, Multi-scale TTA.
+
+**Final Metrics:**
+- **mIoU:** 0.7341
+- **mDice:** 0.8382
+- **mHD95:** 67.25 (Significant outlier reduction)
+- **IRF (Class 1) HD95:** **43.43** (Record precision for small structures)
+- **Boundary Precision:** 4.41 - 8.22 (Teacher's metric: High clinical fidelity)
+
+**Technical Highlights:**
+- **Gated Boundary-Aware Loss:** Successfully penalized anatomical outliers without sacrificing internal region coverage.
+- **Anatomical Retina Masking:** Eliminated False Positives in the vitreous/sclera regions, leading to a cleaner clinical profile.
+- **Hybrid Scheduling:** 15-epoch linear warmup provided maximum stability for B2 backbone under heavy spatial distortion.
+- **Selective Smoothing:** Maintained the sharp, "spiky" boundaries of PED/SRF while ensuring rounded, realistic IRF cysts.
+
+---
+
 - **Attention Map Visualization:** Integrated a script to extract and visualize spatial attention heatmaps for clinical interpretability (Thesis Chapter 4).
 
 ### 2026-05-29 (test11 - THE GOLDEN MODEL)

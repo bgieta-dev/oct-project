@@ -110,7 +110,15 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
     logging.info(f"Model Parameters: {total_params:.2f}M")
 
-    dataset = OCTDataset(val_imgs, val_masks, processor, use_multimodal=config.USE_MULTIMODAL)
+    # Final Eval Transform Setup (Match Validation logic in train.py)
+    import albumentations as A
+    eval_aug_list = []
+    if getattr(config, "USE_CLAHE", False):
+        eval_aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=1.0))
+    eval_aug_list.append(A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1]))
+    eval_transform = A.Compose(eval_aug_list)
+
+    dataset = OCTDataset(val_imgs, val_masks, processor, transform=eval_transform, use_multimodal=config.USE_MULTIMODAL)
     loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
 
     # 1. Pre-scan to find best examples for each class

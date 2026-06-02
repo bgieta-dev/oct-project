@@ -206,7 +206,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     boundary_criterion = BoundaryLoss()
 
     best_miou = 0.0
-    patience = 10
+    patience = 15 # Increased for the final Grand Synthesis run
     epochs_no_improve = 0
     start_time = time.time()
     history = {"loss": [], "miou": []}
@@ -231,15 +231,22 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                 
                 main_loss = 0.5 * focal_criterion(logits, labels)
                 if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
-                    aux_loss = 0.5 * tversky_criterion(logits, labels)
+                    # Tversky loss should take probabilities for consistency with Boundary loss
+                    probs = F.softmax(logits, dim=1)
+                    aux_loss = 0.5 * tversky_criterion(probs, labels)
                 else:
                     aux_loss = 0.5 * dice_loss(logits, labels)
                 
-                # Boundary Loss Integration
+                # Boundary Loss Integration with Adaptive Annealing
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
                     probs = F.softmax(logits, dim=1)
                     b_loss = boundary_criterion(probs, labels)
-                    aux_loss += getattr(config, "BOUNDARY_ALPHA", 0.1) * b_loss
+                    
+                    # Adaptive Boundary Annealing: 
+                    # Start with low boundary weight (0.01) and grow to 0.1 as training progresses
+                    # This allows the model to find fluid first, then refine edges.
+                    annealed_weight = min(0.1, 0.01 + (epoch * 0.0025))
+                    aux_loss += annealed_weight * b_loss
 
                 loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             
