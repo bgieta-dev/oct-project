@@ -124,6 +124,11 @@ class OCTDataset(Dataset):
             # Scale back to 0-255 uint8 so processor works correctly
             image = (image * 255).astype(np.uint8)
             
+        # Ensure image is resized to the target training size if defined
+        if hasattr(config, "AUG_SIZE") and (image.shape[0] != config.AUG_SIZE[0] or image.shape[1] != config.AUG_SIZE[1]):
+            import cv2
+            image = cv2.resize(image, (config.AUG_SIZE[1], config.AUG_SIZE[0]), interpolation=cv2.INTER_LINEAR)
+
         # SegFormer wants pixel_values (C, H, W) and labels (H, W)
         inputs = self.processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.squeeze(0)
