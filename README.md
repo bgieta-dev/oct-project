@@ -64,8 +64,9 @@ Based on the official thesis requirements, the systematic comparison between Seg
 **Model:** SegFormer (**nvidia/mit-b2**)
 **Objective:** Final clinical refinement combining the record-setting baseline of Test 12 with new anatomical logic to break the 0.75 mIoU barrier.
 **Key Changes & Rationale:**
-- **Restored 2.5D Context (From Test 12 Record):** 
-    - *Why:* Deep review confirmed the record HD95 (43.43) was achieved using 2.5D volumetric context. Adjacent slices provide crucial 3D spatial cues for the Boundary Loss to differentiate artifacts from true cysts.
+- **Disabled Unstable Boundary Loss:** 
+    - *Action:* Set `USE_BOUNDARY_LOSS = False`.
+    - *Why:* Deep mathematical analysis revealed `BoundaryLoss` returns unscaled absolute pixel distances (SDF). This acted as a massive penalty, trapping the optimizer in a "Loss Plateau" (~0.81) because predicting fluid incurred huge SDF penalties. Boundary precision is now exclusively and safely handled by the `Soft-CRF` post-processing.
 - **Anatomical Loss Masking (Retina-Only):** 
     - *Action:* Integrated dynamic retina masking into the training loop.
     - *Why:* Forces `Tversky` and `Boundary Loss` to ignore non-anatomical noise (vitreous/sclera). Model capacity is now dedicated 100% to retinal tissue.

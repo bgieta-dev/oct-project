@@ -26,7 +26,7 @@ USE_DYNAMIC_WEIGHTS = True # Calculate weights from training set
 USE_CLAHE = True # sharpening the fluid-tissue interface
 USE_TVERSKY = True # Use Tversky Loss instead of Dice Loss
 USE_FOCAL_TVERSKY = True # Combine Focal with Tversky for extreme focus
-USE_BOUNDARY_LOSS = True # Proven success in Test 12 for HD95 optimization
+USE_BOUNDARY_LOSS = False # Disabled: Causes loss plateau. Soft-CRF handles boundaries now.
 BOUNDARY_ALPHA = 0.1     
 # Standard gamma for balanced focus
 FOCAL_GAMMA = 2.0 
