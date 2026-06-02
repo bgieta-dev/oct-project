@@ -53,7 +53,8 @@ class BoundaryLoss(torch.nn.Module):
             sdf = torch.from_numpy(sdf_numpy).float().to(probs.device)
 
         # Gated Boundary Loss: Only penalize probabilities outside the GT (positive SDF)
-        loss = probs * torch.clamp(sdf, min=0)
+        # We only care about the fluid classes (1, 2, 3)
+        loss = probs[:, 1:] * torch.clamp(sdf[:, 1:], min=0)
         return loss.mean()
 
 class FocalLoss(torch.nn.Module):
