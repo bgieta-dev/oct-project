@@ -127,6 +127,12 @@ class OCTDataset(Dataset):
         # SegFormer wants pixel_values (C, H, W) and labels (H, W)
         inputs = self.processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.squeeze(0)
+        
+        # Ensure mask is resized to the target training size if defined
+        if hasattr(config, "AUG_SIZE") and mask.shape != config.AUG_SIZE:
+            import cv2
+            mask = cv2.resize(mask, (config.AUG_SIZE[1], config.AUG_SIZE[0]), interpolation=cv2.INTER_NEAREST)
+            
         labels = torch.from_numpy(mask).long()
         
         return {"pixel_values": pixel_values, "labels": labels, "orig_img": image}
