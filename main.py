@@ -119,9 +119,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-]:.4f}`\n"
-    msg += f"HD95: `{metrics['mHD95']:.2f}`"
-    send_discord_notification(msg)
-
-if __name__ == "__main__":
-    main()
