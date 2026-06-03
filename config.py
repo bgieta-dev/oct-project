@@ -10,10 +10,10 @@ IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
 # Model Configuration
-MODEL_NAME = "nvidia/mit-b2" # Best stability + Advanced logic
+MODEL_NAME = "nvidia/mit-b2" # Golden Model: Best stability + Advanced logic
 NUM_LABELS = 4
 USE_MULTIMODAL = True
-USE_25D = False # Multimodal (Denoised/Edge) is more stable for boundaries than 2.5D
+USE_25D = True # Stack adjacent slices (t-1, t, t+1) for volumetric context
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training Hyperparameters
@@ -28,22 +28,22 @@ USE_TVERSKY = True # Use Tversky Loss instead of Dice Loss
 USE_FOCAL_TVERSKY = True # Combine Focal with Tversky for extreme focus
 USE_BOUNDARY_LOSS = False # Disabled: Causes loss plateau. Soft-CRF handles boundaries now.
 BOUNDARY_ALPHA = 0.1     
-# Standard gamma for balanced focus
-FOCAL_GAMMA = 2.0 
-DROPOUT_RATE = 0.2 # Restored to 0.2 (Test 12) to prevent overfitting on 56 patients
-WARMUP_EPOCHS = 5 # Reduced from 15 for faster convergence
+# Increased Focal Gamma to force focus on difficult structures (from Test 11)
+FOCAL_GAMMA = 3.0 
+DROPOUT_RATE = 0.2 # Heavier regularization for 56 patients
+WARMUP_EPOCHS = 15 # Extended to stabilize extreme augmentations (from Test 11)
 
 # Class Definitions
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
 CLASS_WEIGHTS = [0.2, 5.0, 2.0, 2.0] # Fallback weights
-TVERSKY_ALPHA = 0.4 # Increased from 0.2 to penalize False Positives more strongly
-TVERSKY_BETA = 0.6 # Decreased from 0.8 to balance Recall and Precision
+TVERSKY_ALPHA = 0.2 # Restored to 0.2/0.8 balance for higher recall (Test 11 style)
+TVERSKY_BETA = 0.8 
 
 # Evaluation
-MIN_REGION_SIZE = 75 # Increased from 50 to aggressively filter out small FP islands
+MIN_REGION_SIZE = 50 # Restored from 50 (Test 11) to be more generous with small cysts
 USE_TTA = True # Test-Time Augmentation
-TTA_SCALES = [0.8, 1.0, 1.2, 1.5] # Multi-scale inference
-USE_SOFT_CRF = True # Edge-aware bilateral smoothing for boundary alignment
+TTA_SCALES = [0.8, 1.0, 1.2] # Multi-scale inference
+USE_SOFT_CRF = True # Edge-aware bilateral smoothing for boundary alignment (from Test 14)
 
 
 CLASS_THRESHOLDS = {1: 0.50, 2: 0.50, 3: 0.50} # Restored IRF threshold to 0.5 to stop over-prediction

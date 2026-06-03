@@ -5,6 +5,7 @@ import gc
 import torch
 import requests
 import json
+import sys
 from datetime import datetime
 from train import train_model
 from eval import evaluate_model
@@ -113,6 +114,12 @@ def main():
     # Discord Notification
     msg = f"**Training Finished!**\nRun: `{os.path.basename(exp_dir)}`\n"
     msg += f"mIoU: `{metrics['mIoU']:.4f}` | mDice: `{metrics['mDice']:.4f}`\n"
+    msg += f"HD95: `{metrics['mHD95']:.2f}`"
+    send_discord_notification(msg)
+
+if __name__ == "__main__":
+    main()
+]:.4f}`\n"
     msg += f"HD95: `{metrics['mHD95']:.2f}`"
     send_discord_notification(msg)
 

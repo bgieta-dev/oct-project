@@ -1,4 +1,4 @@
 @echo off
 call venv\Scripts\activate
-python main.py
+python main.py %1
 pause
