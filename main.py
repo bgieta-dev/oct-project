@@ -6,6 +6,7 @@ import torch
 import requests
 import json
 import sys
+import traceback
 from datetime import datetime
 from train import train_model
 from eval import evaluate_model
@@ -75,6 +76,11 @@ def main():
     setup_logging(exp_dir)
     logging.info(f"Pipeline started. Results directory: {exp_dir}")
     
+    # [CLEANUP] Remove stale weights to prevent architecture mismatch (e.g., B2 weights loading into B3)
+    if os.path.exists("best_model.pth"):
+        os.remove("best_model.pth")
+        logging.info("Removed stale best_model.pth")
+    
     # Hardware Diagnostics
     logging.info(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     if torch.cuda.is_available():
@@ -93,11 +99,13 @@ def main():
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    except:
-        print("Error in train")
+    except Exception as e:
+        logging.error("CRITICAL ERROR during training:")
+        logging.error(traceback.format_exc())
 
     # PHASE 2: EVALUATION
     logging.info("--- PHASE 2: EVALUATION ---")
+    metrics = None
     try:
         metrics = evaluate_model(model_path=best_model_name, output_dir=exp_dir)
     
@@ -120,33 +128,38 @@ def main():
             
             logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | ASD: {asd_val:.2f}")
             logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
-    except:
-        print("Error in eval")
+    except Exception as e:
+        logging.error("ERROR during evaluation:")
+        logging.error(traceback.format_exc())
 
     # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
     try:
         logging.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
         att_dir = os.path.join(exp_dir, "attention_maps")
         generate_attention_maps(model_path=best_model_name, output_dir=att_dir)
-    except:
-        print("Error in ATTENTION MAPS")
+    except Exception as e:
+        logging.error("ERROR during attention visualization:")
+        logging.error(traceback.format_exc())
 
     # PHASE 4: ARCHIVING
-    # Save the exact version of the code and plan used for this specific run
-    try: 
+    try:
+        logging.info("--- PHASE 4: ARCHIVING ---")
+        # Save the exact version of the code and plan used for this specific run
         scripts_to_archive = ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]
         for f in scripts_to_archive:
             if os.path.exists(f):
                 shutil.copy(f, os.path.join(exp_dir, f))
-                
         logging.info(f"Pipeline finished successfully. Artifacts saved in {exp_dir}")
+    except Exception as e:
+        logging.error("ERROR during archiving:")
+        logging.error(traceback.format_exc())
 
-        # Send Notification
+    # Send Notification
+    if metrics:
         msg = f"**OCT Research Update**\nRun: `{os.path.basename(exp_dir)}` completed.\nmDice: `{metrics['mDice']:.4f}` | mHD95: `{metrics['mHD95']:.2f}`"
         send_discord_notification(msg)
-    except:
-        print("Error in ARCHIVING")
-        
+    else:
+        send_discord_notification(f"**OCT Research Update**\nRun: `{os.path.basename(exp_dir)}` FAILED during evaluation.")
 
 if __name__ == "__main__":
     main()

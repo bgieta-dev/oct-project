@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from eval import get_retina_mask
 from scipy.ndimage import distance_transform_edt
 from medpy.metric.binary import hd95
+import cv2
 
 # --- CUSTOM LOSS FUNCTIONS FOR MEDICAL SEGMENTATION ---
 
@@ -101,7 +102,7 @@ def calculate_dynamic_weights(mask_paths, num_classes=config.NUM_LABELS):
 
 def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."):
     """
-    Core training loop with automated plotting and error recovery.
+    Core training loop for SegFormer MiT architectures.
     """
     all_files = sorted(os.listdir(config.IMG_DIR))
     train_patients, val_patients, test_patients = get_stratified_splits(all_files)
@@ -141,8 +142,8 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 
     train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, use_multimodal=config.USE_MULTIMODAL)
     val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
-    train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=0, pin_memory=True)
 
     model = SegformerForSemanticSegmentation.from_pretrained(
         config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True,
@@ -166,90 +167,92 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     best_miou = 0.0
     history = {"loss": [], "miou": [], "mhd95": []}
 
-    try:
-        for epoch in range(epochs):
-            model.train()
-            epoch_loss = 0
-            optimizer.zero_grad()
-            pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
-            for i, batch in enumerate(pbar):
-                pixel_values = batch["pixel_values"].to(config.DEVICE)
-                labels = batch["labels"].to(config.DEVICE)
-                with torch.amp.autocast('cuda', enabled=config.USE_AMP):
-                    outputs = model(pixel_values=pixel_values, labels=labels)
-                    logits = torch.nn.functional.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
-                    main_loss = focal_criterion(logits, labels)
-                    aux_loss = tversky_criterion(logits, labels)
-                    if getattr(config, "USE_BOUNDARY_LOSS", False):
-                        aux_loss += min(0.1, 0.01 + (epoch * 0.0025)) * boundary_criterion(F.softmax(logits, dim=1), labels)
-                    loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
-                scaler.scale(loss).backward()
-                if (i + 1) % config.ACCUMULATION_STEPS == 0:
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                    optimizer.zero_grad()
-                epoch_loss += loss.item() * config.ACCUMULATION_STEPS
-                pbar.set_postfix({"loss": f"{loss.item() * config.ACCUMULATION_STEPS:.4f}"})
+    for epoch in range(epochs):
+        model.train()
+        epoch_loss = 0
+        optimizer.zero_grad()
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
+        for i, batch in enumerate(pbar):
+            pixel_values = batch["pixel_values"].to(config.DEVICE)
+            labels = batch["labels"].to(config.DEVICE)
+            with torch.amp.autocast('cuda', enabled=config.USE_AMP):
+                outputs = model(pixel_values=pixel_values, labels=labels)
+                logits = torch.nn.functional.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+                main_loss = focal_criterion(logits, labels)
+                aux_loss = tversky_criterion(logits, labels)
+                if getattr(config, "USE_BOUNDARY_LOSS", False):
+                    aux_loss += min(0.1, 0.01 + (epoch * 0.0025)) * boundary_criterion(F.softmax(logits, dim=1), labels)
+                loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
+            scaler.scale(loss).backward()
+            if (i + 1) % config.ACCUMULATION_STEPS == 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+            epoch_loss += loss.item() * config.ACCUMULATION_STEPS
+            pbar.set_postfix({"loss": f"{loss.item() * config.ACCUMULATION_STEPS:.4f}"})
+        
+        scheduler.step()
+
+        if (epoch + 1) % config.VAL_INTERVAL == 0:
+            model.eval()
+            total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
+            class_hd95_vals = {1: [], 2: [], 3: []}
+            with torch.no_grad():
+                for i, batch in enumerate(val_loader):
+                    pixel_values = batch["pixel_values"].to(config.DEVICE)
+                    labels_batch = batch["labels"].to(config.DEVICE)
+                    outputs = model(pixel_values=pixel_values)
+                    logits = torch.nn.functional.interpolate(outputs.logits, size=labels_batch.shape[-2:], mode="bilinear", align_corners=False)
+                    preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
+                    labels_np = labels_batch.cpu().numpy()
+                    
+                    cleaned_preds = []
+                    for b_idx in range(len(preds)):
+                        p, l_np = preds[b_idx], labels_np[b_idx]
+                        orig_img = val_ds.get_raw_image(i * config.BATCH_SIZE + b_idx)
+                        if orig_img.shape != p.shape: orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]))
+                        ret_mask = get_retina_mask(orig_img)
+                        c_mask_all = np.zeros_like(p)
+                        for c in range(1, config.NUM_LABELS):
+                            c_mask = ((p == c).astype(np.uint8) * ret_mask)
+                            if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                                for lbl in range(1, num_labels):
+                                    if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                                        c_mask_all[labels_im == lbl] = c
+                            else:
+                                c_mask_all[c_mask > 0] = c
+                        
+                        cleaned_preds.append(c_mask_all)
+                        # Correct HD95 accumulation: per whole slice
+                        for c in [1, 2, 3]:
+                            if np.any(c_mask_all == c) and np.any(l_np == c):
+                                class_hd95_vals[c].append(hd95(c_mask_all == c, l_np == c))
+                    
+                    preds = np.array(cleaned_preds)
+                    mask_cm = (labels_np >= 0) & (labels_np < config.NUM_LABELS)
+                    total_cm += np.bincount(config.NUM_LABELS * labels_np[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
-            scheduler.step()
+            ious = np.diag(total_cm) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) - np.diag(total_cm) + 1e-6)
+            curr_miou = np.mean(ious)
+            means = [np.mean(class_hd95_vals[c]) for c in [1, 2, 3] if class_hd95_vals[c]]
+            curr_mhd95 = np.mean(means) if means else 0.0
+            avg_loss = epoch_loss / len(train_loader)
+            history["loss"].append(avg_loss); history["miou"].append(curr_miou); history["mhd95"].append(curr_mhd95)
+            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | mHD95: {curr_mhd95:.2f}")
+            if curr_miou > best_miou:
+                best_miou = curr_miou
+                torch.save(model.state_dict(), save_path)
+                logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
 
-            if (epoch + 1) % config.VAL_INTERVAL == 0:
-                model.eval()
-                total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
-                class_hd95_vals = {1: [], 2: [], 3: []}
-                with torch.no_grad():
-                    for i, batch in enumerate(val_loader):
-                        pixel_values = batch["pixel_values"].to(config.DEVICE)
-                        labels_batch = batch["labels"].to(config.DEVICE)
-                        outputs = model(pixel_values=pixel_values)
-                        logits = torch.nn.functional.interpolate(outputs.logits, size=labels_batch.shape[-2:], mode="bilinear", align_corners=False)
-                        preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
-                        labels_np = labels_batch.cpu().numpy()
-                        if getattr(config, "MIN_REGION_SIZE", 0) > 0:
-                            cleaned_preds = []
-                            for b_idx in range(len(preds)):
-                                p, l_np = preds[b_idx], labels_np[b_idx]
-                                orig_img = val_ds.get_raw_image(i * config.BATCH_SIZE + b_idx)
-                                if orig_img.shape != p.shape: orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]))
-                                ret_mask = get_retina_mask(orig_img)
-                                c_mask_all = np.zeros_like(p)
-                                for c in range(1, config.NUM_LABELS):
-                                    c_mask = ((p == c).astype(np.uint8) * ret_mask)
-                                    num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
-                                    for lbl in range(1, num_labels):
-                                        if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
-                                            c_mask_all[labels_im == lbl] = c
-                                            if np.any(l_np == c): class_hd95_vals[c].append(hd95(labels_im == lbl, l_np == c))
-                                cleaned_preds.append(c_mask_all)
-                            preds = np.array(cleaned_preds)
-                        mask_cm = (labels_np >= 0) & (labels_np < config.NUM_LABELS)
-                        total_cm += np.bincount(config.NUM_LABELS * labels_np[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
-                
-                ious = np.diag(total_cm) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) - np.diag(total_cm) + 1e-6)
-                curr_miou = np.mean(ious)
-                means = [np.mean(class_hd95_vals[c]) for c in [1, 2, 3] if class_hd95_vals[c]]
-                curr_mhd95 = np.mean(means) if means else 0.0
-                avg_loss = epoch_loss / len(train_loader)
-                history["loss"].append(avg_loss); history["miou"].append(curr_miou); history["mhd95"].append(curr_mhd95)
-                logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | mHD95: {curr_mhd95:.2f}")
-                if curr_miou > best_miou:
-                    best_miou = curr_miou
-                    torch.save(model.state_dict(), save_path)
-                    logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
-
-            # Automated Plotting after each validation
-            plt.figure(figsize=(12, 4))
-            plt.subplot(1, 3, 1); plt.plot(history["loss"]); plt.title("Loss")
-            plt.subplot(1, 3, 2); plt.plot(history["miou"]); plt.title("mIoU")
-            plt.subplot(1, 3, 3); plt.plot(history["mhd95"]); plt.title("mHD95")
-            plt.savefig(os.path.join(output_dir, "metrics.png")); plt.close()
-
-    except Exception as e:
-        logging.error(f"Training interrupted by error: {e}")
-    finally:
-        logging.info(f"Training finished. Best mIoU: {best_miou:.4f}")
+        # Automated Plotting
+        plt.figure(figsize=(12, 4))
+        plt.subplot(1, 3, 1); plt.plot(history["loss"]); plt.title("Loss")
+        plt.subplot(1, 3, 2); plt.plot(history["miou"]); plt.title("mIoU")
+        plt.subplot(1, 3, 3); plt.plot(history["mhd95"]); plt.title("mHD95")
+        plt.savefig(os.path.join(output_dir, "metrics.png")); plt.close()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
