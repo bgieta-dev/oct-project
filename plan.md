@@ -13,7 +13,7 @@
 #### 1. Model Experiments & Stability
 - [x] **SegFormer-B2 Strategy:** Proven optimal backbone (Test 11/14).
 - [x] **Test 16 (The Fusion Record):** Broken project record with **0.7621 mIoU** (at epoch 37). Stable Focal-Tversky + Argmax configuration.
-- [ ] **Test 17 (B3 Scale-up):** Final attempt to scale to MiT-B3 using the Test 16 "Stability Fusion" pipeline. Goal: Investigate if increased capacity improves IRF recall without overfitting.
+- [ ] **Test 17 (B3 Scale-up):** Final attempt to scale to MiT-B3 using the Test 16 "Stability Fusion" pipeline. **Configuration:** `Dropout=0.3` (overfitting protection), `MIN_REGION=5` (detail preservation), `LR=5e-5`. Status: **ACTIVE**.
 
 #### 2. Interpretability & Analysis
 - [x] **Attention Maps:** Integrated automated extraction of Transformer attention heatmaps to identify diagnostic focus areas (RPE, FLuid-Tissue interface).

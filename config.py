@@ -10,56 +10,51 @@ IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
 # --- SEGFORMER ARCHITECTURE CONFIGURATION ---
-# Model: MiT-B2 (Mix Vision Transformer). 
-# B2 provides the best balance between parameter count and generalization on small medical datasets (56 patients).
-MODEL_NAME = "nvidia/mit-b2" 
+# Model: MiT-B3 (Mix Vision Transformer). 
+# Test 17: Scaling up to B3 (~44M parameters) using the stabilized Test 16 pipeline.
+MODEL_NAME = "nvidia/mit-b3" 
 NUM_LABELS = 4
 USE_MULTIMODAL = True
 # 2.5D Logic: Utilizing 3 adjacent B-scans as input channels (t-1, t, t+1).
-# This provides the transformer with volumetric/anatomical context.
 USE_25D = True 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- TRAINING HYPERPARAMETERS ---
-LR = 6e-5 # Learning Rate tuned for ImageNet weight fine-tuning
+LR = 5e-5 # Slightly lower LR for B3 stability
 EPOCHS = 80
 OPTIMIZER_TYPE = "AdamW" 
-USE_AMP = True # Mixed Precision for VRAM efficiency and speed
+USE_AMP = True 
 VAL_INTERVAL = 1 
 
 # --- LOSS FUNCTION STRATEGY ---
-# Disabled dynamic weights (inverse freq) to stabilize HD95 by maintaining background penalty.
 USE_DYNAMIC_WEIGHTS = False 
-USE_CLAHE = True # Local contrast enhancement at fluid-tissue interfaces
-USE_TVERSKY = True # Tversky Index optimization (DSC with FP/FN control)
-USE_FOCAL_TVERSKY = True # Focal + Tversky combination - critical for small IRF cysts
-USE_BOUNDARY_LOSS = False # Disabled. Past experiments (Test 13) showed that SDF-based boundary loss destabilizes training on small datasets, increasing HD95.
+USE_CLAHE = True 
+USE_TVERSKY = True 
+USE_FOCAL_TVERSKY = True 
+USE_BOUNDARY_LOSS = False # Disabled per Test 13/15 lessons.
 BOUNDARY_ALPHA = 0.1     
 
-# Focal Gamma: 2.0 (Balanced focus on hard pixels). 
-# Values above 3.0 caused convergence regression on this specific dataset.
+# Focal Gamma: 2.0 (Balanced focus)
 FOCAL_GAMMA = 2.0 
-DROPOUT_RATE = 0.2 # Regularization to prevent overfitting on the RETOUCH dataset
-WARMUP_EPOCHS = 15 # Extended warmup (15 epochs) to stabilize transformer weights initially
+# [MODIFICATION] Increased to 0.3 to prevent B3 from memorizing noise on the small RETOUCH set.
+DROPOUT_RATE = 0.3 
+WARMUP_EPOCHS = 15 
 
 # --- CLASS DEFINITIONS AND CLINICAL WEIGHTS ---
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
-# Static Weights: 
-# Background (0.5) - prevents fluid "bleeding" into healthy tissue (reduces HD95).
-# IRF (5.0) - highest priority for the smallest and hardest-to-segment cysts.
+# Static Weights (Test 16 success): Higher background penalty (0.5) to keep HD95 low.
 CLASS_WEIGHTS = [0.5, 5.0, 2.0, 2.0] 
 TVERSKY_ALPHA = 0.3 
 TVERSKY_BETA = 0.7 
 
 # --- EVALUATION AND POST-PROCESSING ---
-# Minimum Region Size: 10px. 
-# Reduced from 50px to preserve small, clinically significant IRF microcysts.
-MIN_REGION_SIZE = 10 
-USE_TTA = True # Test-Time Augmentation (multi-scale prediction averaging)
+# [MODIFICATION] Reduced to 5px. B3 has higher capacity for detail; we want to preserve its precise detections.
+MIN_REGION_SIZE = 5 
+USE_TTA = True 
 TTA_SCALES = [0.75, 1.0, 1.25, 1.5] 
-USE_SOFT_CRF = True # Edge-aware smoothing to align boundaries with scan intensities
+USE_SOFT_CRF = True # Edge-aware smoothing
 
-# Class thresholds for manual calibration (optional fallback for non-argmax logic)
+# Class thresholds for manual calibration (optional fallback)
 CLASS_THRESHOLDS = {1: 0.35, 2: 0.50, 3: 0.50} 
 
 # --- DATA AUGMENTATION SETTINGS ---
@@ -80,7 +75,7 @@ def get_vram_config(model_name: str):
     if "b4" in model_name:
         return {"batch_size": 4, "accum_steps": 8}
     elif "b3" in model_name:
-        return {"batch_size": 8, "accum_steps": 4}
+        return {"batch_size": 8, "accum_steps": 4} # Verified for 12GB VRAM
     elif "b2" in model_name:
         return {"batch_size": 8, "accum_steps": 4}
     elif "b1" in model_name:

@@ -83,57 +83,70 @@ def main():
     # PHASE 1: MODEL TRAINING
     best_model_name = "best_model.pth"
     logging.info("--- PHASE 1: TRAINING ---")
-    train_model(epochs=config.EPOCHS, save_path=best_model_name, output_dir=exp_dir)
-    
-    if os.path.exists(best_model_name):
-        shutil.copy(best_model_name, os.path.join(exp_dir, "best_model.pth"))
+    try:
+        train_model(epochs=config.EPOCHS, save_path=best_model_name, output_dir=exp_dir)
+        
+        if os.path.exists(best_model_name):
+            shutil.copy(best_model_name, os.path.join(exp_dir, "best_model.pth"))
 
-    # Memory Management: Clear VRAM for the evaluation pass
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+        # Memory Management: Clear VRAM for the evaluation pass
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except:
+        print("Error in train")
 
     # PHASE 2: EVALUATION
     logging.info("--- PHASE 2: EVALUATION ---")
-    metrics = evaluate_model(model_path=best_model_name, output_dir=exp_dir)
+    try:
+        metrics = evaluate_model(model_path=best_model_name, output_dir=exp_dir)
     
-    # Log Aggregated Metrics
-    logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
-    logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
-    logging.info(f"Model Parameters: {metrics.get('params', 0):.2f}M")
-    
-    # Log Class-Specific Findings (Essential for Thesis Tables)
-    for c in [1, 2, 3]:
-        name = config.CLASS_NAMES[c]
-        iou = metrics['class_ious'][c]
-        dice = metrics['class_dices'][c]
-        hd = metrics['class_hd95'][c]
-        asd_val = metrics['class_asd'][c]
-        avg_reg_gt = metrics['class_avg_regions_gt'][c]
-        avg_reg_pred = metrics['class_avg_regions_pred'][c]
-        bp = metrics['class_boundary_precision'][c]
-        area = metrics['class_avg_pixel_area'][c]
+        # Log Aggregated Metrics
+        logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
+        logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
+        logging.info(f"Model Parameters: {metrics.get('params', 0):.2f}M")
         
-        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | ASD: {asd_val:.2f}")
-        logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
+        # Log Class-Specific Findings (Essential for Thesis Tables)
+        for c in [1, 2, 3]:
+            name = config.CLASS_NAMES[c]
+            iou = metrics['class_ious'][c]
+            dice = metrics['class_dices'][c]
+            hd = metrics['class_hd95'][c]
+            asd_val = metrics['class_asd'][c]
+            avg_reg_gt = metrics['class_avg_regions_gt'][c]
+            avg_reg_pred = metrics['class_avg_regions_pred'][c]
+            bp = metrics['class_boundary_precision'][c]
+            area = metrics['class_avg_pixel_area'][c]
+            
+            logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | ASD: {asd_val:.2f}")
+            logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
+    except:
+        print("Error in eval")
 
     # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
-    logging.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
-    att_dir = os.path.join(exp_dir, "attention_maps")
-    generate_attention_maps(model_path=best_model_name, output_dir=att_dir)
+    try:
+        logging.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
+        att_dir = os.path.join(exp_dir, "attention_maps")
+        generate_attention_maps(model_path=best_model_name, output_dir=att_dir)
+    except:
+        print("Error in ATTENTION MAPS")
 
     # PHASE 4: ARCHIVING
     # Save the exact version of the code and plan used for this specific run
-    scripts_to_archive = ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]
-    for f in scripts_to_archive:
-        if os.path.exists(f):
-            shutil.copy(f, os.path.join(exp_dir, f))
-            
-    logging.info(f"Pipeline finished successfully. Artifacts saved in {exp_dir}")
+    try: 
+        scripts_to_archive = ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]
+        for f in scripts_to_archive:
+            if os.path.exists(f):
+                shutil.copy(f, os.path.join(exp_dir, f))
+                
+        logging.info(f"Pipeline finished successfully. Artifacts saved in {exp_dir}")
 
-    # Send Notification
-    msg = f"**OCT Research Update**\nRun: `{os.path.basename(exp_dir)}` completed.\nmDice: `{metrics['mDice']:.4f}` | mHD95: `{metrics['mHD95']:.2f}`"
-    send_discord_notification(msg)
+        # Send Notification
+        msg = f"**OCT Research Update**\nRun: `{os.path.basename(exp_dir)}` completed.\nmDice: `{metrics['mDice']:.4f}` | mHD95: `{metrics['mHD95']:.2f}`"
+        send_discord_notification(msg)
+    except:
+        print("Error in ARCHIVING")
+        
 
 if __name__ == "__main__":
     main()

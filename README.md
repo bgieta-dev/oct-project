@@ -21,14 +21,23 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
 
 ## Experimental History
 
-### 2026-06-03 (test16 - THE FINAL STABILITY RUN - ACTIVE)
+### 2026-06-03 (test17 - THE FINAL SCALE-UP - ACTIVE)
+**Model:** SegFormer (**MiT-B3**)
+**Status:** **Active Final Benchmark.**
+**Strategy (Scaling for Precision):**
+- **Architecture:** Scaling to MiT-B3 (~44M parameters) to capture high-frequency clinical details.
+- **Regularization:** Increased **Dropout to 0.3** to prevent overfitting on the small RETOUCH cohort.
+- **True Relaxed Post-Processing:** 
+    - **Removed all morphological operations** (`MORPH_OPEN`, `MORPH_CLOSE`).
+    - Reduced **MIN_REGION to 5px** to allow B3's sharper features to persist.
+    - This allows the model's raw high-resolution output to drive the final metrics without artificial distortion.
+- **Consistency:** Maintaining the successful Test 16 pipeline (Fixed weights `[0.5, 5.0, 2.0, 2.0]`, Argmax, Focal-Tversky).
+
+### 2026-06-03 (test16 - THE FINAL STABILITY RUN - COMPLETED)
 **Model:** SegFormer (**MiT-B2**)
-**Status:** **Current Production Candidate.**
-**Strategy (The "Stability Fusion"):**
-- **Loss Strategy:** Focal-Tversky ($0.5/0.5$) with fixed weights `[0.5, 5.0, 2.0, 2.0]`. 
-- **Critical Change:** Disabled **Boundary Loss**. Past regressions (Test 13) proved that SDF-based boundary penalties destabilize training on the small RETOUCH dataset (56 patients).
-- **Post-Processing:** Argmax-based assignment + selective morphological cleaning (MIN_REGION=10).
-- **Interpretability:** Full integration of **Attention Map** extraction for Thesis Chapter 4.
+**Results:** mIoU: **0.7621** (Epoch 37 Record), Final Eval mIoU: **0.7069**.
+**Analysis:** Confirmed that MiT-B2 can reach record intelligence, but final metrics were suppressed by over-aggressive post-processing (lessons applied to Test 17).
+
 
 ### 2026-06-03 (test15 - Anatomical Masking Regression)
 **Results:** mIoU: **0.7013** (Performance Drop).

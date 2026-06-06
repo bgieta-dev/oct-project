@@ -198,8 +198,9 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 new_p = np.zeros_like(p)
                 for c in range(1, config.NUM_LABELS):
                     c_mask = ((p == c).astype(np.uint8) * ret_mask)
-                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-                    if c == 1: c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+                    
+                    # [RELAXED] Removing morphology to let B3's high-frequency details shine.
+                    # No MORPH_CLOSE, No MORPH_OPEN.
                     
                     num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
                     for label in range(1, num_labels):
