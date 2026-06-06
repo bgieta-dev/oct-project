@@ -4,52 +4,65 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-# Paths
+# --- PATH CONFIGURATION ---
 DATA_DIR = "data_folder"
 IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
-# Model Configuration
-MODEL_NAME = "nvidia/mit-b2" # Golden Model: Best stability + Advanced logic
+# --- SEGFORMER ARCHITECTURE CONFIGURATION ---
+# Model: MiT-B2 (Mix Vision Transformer). 
+# B2 provides the best balance between parameter count and generalization on small medical datasets (56 patients).
+MODEL_NAME = "nvidia/mit-b2" 
 NUM_LABELS = 4
 USE_MULTIMODAL = True
-USE_25D = True # Stack adjacent slices (t-1, t, t+1) for volumetric context
+# 2.5D Logic: Utilizing 3 adjacent B-scans as input channels (t-1, t, t+1).
+# This provides the transformer with volumetric/anatomical context.
+USE_25D = True 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Training Hyperparameters
-LR = 6e-5 
+# --- TRAINING HYPERPARAMETERS ---
+LR = 6e-5 # Learning Rate tuned for ImageNet weight fine-tuning
 EPOCHS = 80
-OPTIMIZER_TYPE = "AdamW" # AdamW, SGD
-USE_AMP = True # Mixed Precision Training
-VAL_INTERVAL = 1 # Validate every N epochs
-USE_DYNAMIC_WEIGHTS = True # Calculate weights from training set
-USE_CLAHE = True # sharpening the fluid-tissue interface
-USE_TVERSKY = True # Use Tversky Loss instead of Dice Loss
-USE_FOCAL_TVERSKY = True # Combine Focal with Tversky for extreme focus
-USE_BOUNDARY_LOSS = False # Disabled: Causes loss plateau. Soft-CRF handles boundaries now.
+OPTIMIZER_TYPE = "AdamW" 
+USE_AMP = True # Mixed Precision for VRAM efficiency and speed
+VAL_INTERVAL = 1 
+
+# --- LOSS FUNCTION STRATEGY ---
+# Disabled dynamic weights (inverse freq) to stabilize HD95 by maintaining background penalty.
+USE_DYNAMIC_WEIGHTS = False 
+USE_CLAHE = True # Local contrast enhancement at fluid-tissue interfaces
+USE_TVERSKY = True # Tversky Index optimization (DSC with FP/FN control)
+USE_FOCAL_TVERSKY = True # Focal + Tversky combination - critical for small IRF cysts
+USE_BOUNDARY_LOSS = False # Disabled. Past experiments (Test 13) showed that SDF-based boundary loss destabilizes training on small datasets, increasing HD95.
 BOUNDARY_ALPHA = 0.1     
-# Increased Focal Gamma to force focus on difficult structures (from Test 11)
-FOCAL_GAMMA = 3.0 
-DROPOUT_RATE = 0.2 # Heavier regularization for 56 patients
-WARMUP_EPOCHS = 15 # Extended to stabilize extreme augmentations (from Test 11)
 
-# Class Definitions
+# Focal Gamma: 2.0 (Balanced focus on hard pixels). 
+# Values above 3.0 caused convergence regression on this specific dataset.
+FOCAL_GAMMA = 2.0 
+DROPOUT_RATE = 0.2 # Regularization to prevent overfitting on the RETOUCH dataset
+WARMUP_EPOCHS = 15 # Extended warmup (15 epochs) to stabilize transformer weights initially
+
+# --- CLASS DEFINITIONS AND CLINICAL WEIGHTS ---
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
-CLASS_WEIGHTS = [0.2, 5.0, 2.0, 2.0] # Fallback weights
-TVERSKY_ALPHA = 0.2 # Restored to 0.2/0.8 balance for higher recall (Test 11 style)
-TVERSKY_BETA = 0.8 
+# Static Weights: 
+# Background (0.5) - prevents fluid "bleeding" into healthy tissue (reduces HD95).
+# IRF (5.0) - highest priority for the smallest and hardest-to-segment cysts.
+CLASS_WEIGHTS = [0.5, 5.0, 2.0, 2.0] 
+TVERSKY_ALPHA = 0.3 
+TVERSKY_BETA = 0.7 
 
-# Evaluation
-MIN_REGION_SIZE = 50 # Restored from 50 (Test 11) to be more generous with small cysts
-USE_TTA = True # Test-Time Augmentation
-TTA_SCALES = [0.8, 1.0, 1.2] # Multi-scale inference
-USE_SOFT_CRF = True # Edge-aware bilateral smoothing for boundary alignment (from Test 14)
+# --- EVALUATION AND POST-PROCESSING ---
+# Minimum Region Size: 10px. 
+# Reduced from 50px to preserve small, clinically significant IRF microcysts.
+MIN_REGION_SIZE = 10 
+USE_TTA = True # Test-Time Augmentation (multi-scale prediction averaging)
+TTA_SCALES = [0.75, 1.0, 1.25, 1.5] 
+USE_SOFT_CRF = True # Edge-aware smoothing to align boundaries with scan intensities
 
+# Class thresholds for manual calibration (optional fallback for non-argmax logic)
+CLASS_THRESHOLDS = {1: 0.35, 2: 0.50, 3: 0.50} 
 
-CLASS_THRESHOLDS = {1: 0.50, 2: 0.50, 3: 0.50} # Restored IRF threshold to 0.5 to stop over-prediction
-
-
-# Augmentation Settings
+# --- DATA AUGMENTATION SETTINGS ---
 AUG_SIZE = (512, 512)
 AUG_SCALE = (0.8, 1.0)
 AUG_PROBS = {
@@ -59,11 +72,11 @@ AUG_PROBS = {
     "noise": 0.2
 }
 
-# Notifications
+# --- NOTIFICATIONS ---
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 def get_vram_config(model_name: str):
-    """Auto-adjust for VRAM safety (target effective batch 32)"""
+    """Auto-adjust batch size for 12GB VRAM (Target effective batch = 32)"""
     if "b4" in model_name:
         return {"batch_size": 4, "accum_steps": 8}
     elif "b3" in model_name:
@@ -72,7 +85,7 @@ def get_vram_config(model_name: str):
         return {"batch_size": 8, "accum_steps": 4}
     elif "b1" in model_name:
         return {"batch_size": 16, "accum_steps": 2}
-    else: # B0 or others
+    else: 
         return {"batch_size": 16, "accum_steps": 2}
 
 VRAM = get_vram_config(MODEL_NAME)

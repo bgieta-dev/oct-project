@@ -2,7 +2,7 @@ import os
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor, get_cosine_schedule_with_warmup
+from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 import albumentations as A
 import time
 from datetime import timedelta
@@ -16,48 +16,48 @@ import config
 from utils import get_stratified_splits
 import torch.nn.functional as F
 from eval import get_retina_mask
-
 from scipy.ndimage import distance_transform_edt
 
+# --- CUSTOM LOSS FUNCTIONS FOR MEDICAL SEGMENTATION ---
+
 class BoundaryLoss(torch.nn.Module):
+    """
+    Boundary Loss based on Signed Distance Field (SDF).
+    Penalizes deviations at the fluid-tissue interfaces.
+    """
     def __init__(self, num_classes=config.NUM_LABELS):
         super(BoundaryLoss, self).__init__()
         self.num_classes = num_classes
 
     def compute_sdf(self, img_gt, out_shape):
-        """Compute Signed Distance Field"""
+        """Compute Signed Distance Field for each class except background"""
         img_gt = img_gt.astype(np.uint8)
         sdf = np.zeros(out_shape)
 
-        for b in range(out_shape[0]): # Batch
-            for c in range(1, out_shape[1]): # Class (skip background)
+        for b in range(out_shape[0]):
+            for c in range(1, out_shape[1]):
                 posmask = img_gt[b] == c
-                if not posmask.any():
-                    continue
+                if not posmask.any(): continue
                 negmask = ~posmask
                 posdis = distance_transform_edt(posmask)
                 negdis = distance_transform_edt(negmask)
-                boundary = negdis - posdis
-                sdf[b, c] = boundary
-
+                sdf[b, c] = negdis - posdis
         return sdf
 
     def forward(self, probs, gt):
-        """
-        probs: (B, C, H, W) - Softmax probabilities
-        gt: (B, H, W) - Ground Truth labels
-        """
         with torch.no_grad():
             gt_numpy = gt.cpu().numpy()
             sdf_numpy = self.compute_sdf(gt_numpy, probs.shape)
             sdf = torch.from_numpy(sdf_numpy).float().to(probs.device)
 
-        # Gated Boundary Loss: Only penalize probabilities outside the GT (positive SDF)
-        # We only care about the fluid classes (1, 2, 3)
-        loss = probs[:, 1:] * torch.clamp(sdf[:, 1:], min=0)
+        # Penalize only pixels outside the ground truth (positive SDF)
+        loss = probs * torch.clamp(sdf, min=0)
         return loss.mean()
 
 class FocalLoss(torch.nn.Module):
+    """
+    Focal Loss to handle extreme class imbalance by focusing on hard-to-classify pixels.
+    """
     def __init__(self, alpha=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
@@ -72,14 +72,16 @@ class FocalLoss(torch.nn.Module):
         if mask is not None:
             focal_loss = focal_loss * mask
             if self.reduction == 'mean':
-                # Only average over the unmasked, active pixels
                 return focal_loss.sum() / (mask.sum() + 1e-8)
                 
         if self.reduction == 'mean': return focal_loss.mean()
-        elif self.reduction == 'sum': return focal_loss.sum()
-        else: return focal_loss
+        else: return focal_loss.sum()
 
 class TverskyLoss(torch.nn.Module):
+    """
+    Tversky Loss: A generalization of Dice loss allowing control over FP vs FN.
+    Essential for detecting small IRF cysts (maximizing Recall).
+    """
     def __init__(self, alpha=getattr(config, "TVERSKY_ALPHA", 0.3), beta=getattr(config, "TVERSKY_BETA", 0.7), num_classes=config.NUM_LABELS):
         super(TverskyLoss, self).__init__()
         self.alpha = alpha
@@ -91,7 +93,7 @@ class TverskyLoss(torch.nn.Module):
         target_one_hot = torch.nn.functional.one_hot(target, self.num_classes).permute(0, 3, 1, 2).float()
         
         if mask is not None:
-            mask = mask.unsqueeze(1) # (B, 1, H, W)
+            mask = mask.unsqueeze(1)
             pred = pred * mask
             target_one_hot = target_one_hot * mask
 
@@ -100,22 +102,12 @@ class TverskyLoss(torch.nn.Module):
         fp = torch.sum(pred * (1 - target_one_hot), dims)
         fn = torch.sum((1 - pred) * target_one_hot, dims)
         
-        # When masking, the sum of pixels isn't the whole image.
-        # But Tversky is ratio-based (Intersection / (Intersection + alpha*FP + beta*FN))
-        # Zeroed pixels won't contribute to TP, FP, or FN.
         tversky = (tp + 1e-6) / (tp + self.alpha * fp + self.beta * fn + 1e-6)
-        return 1 - tversky.mean()
-
-def dice_loss(pred, target, num_classes=config.NUM_LABELS):
-    pred = torch.softmax(pred, dim=1)
-    target_one_hot = torch.nn.functional.one_hot(target, num_classes).permute(0, 3, 1, 2).float()
-    dims = (0, 2, 3)
-    intersection = torch.sum(pred * target_one_hot, dims) 
-    cardinality = torch.sum(pred + target_one_hot, dims)
-    dice = (2. * intersection + 1e-6) / (cardinality + 1e-6)
-    return 1 - dice.mean()
+        # Focus averaging on fluid classes (1, 2, 3) to prevent BG dominance
+        return 1 - tversky[1:].mean()
 
 def calculate_dynamic_weights(mask_paths, num_classes=config.NUM_LABELS):
+    """Statistical inverse-frequency weighting for class balance"""
     logging.info("Calculating dynamic class weights...")
     counts = np.zeros(num_classes)
     from PIL import Image
@@ -123,22 +115,22 @@ def calculate_dynamic_weights(mask_paths, num_classes=config.NUM_LABELS):
         m = np.array(Image.open(p))
         counts += np.bincount(m.flatten(), minlength=num_classes)
     
-    # Inverse frequency weighting
     weights = 1.0 / (counts + 1e-6)
     weights = weights / weights.sum() * num_classes
-    # Ensure background doesn't dominate too much (cap it)
-    weights[0] = min(weights[0], 0.2)
+    weights[0] = min(weights[0], 0.2) # Cap background weight
     return weights
 
+# --- MAIN TRAINING PIPELINE ---
+
 def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."):
+    """
+    Core training loop for SegFormer MiT architectures.
+    Implements 2.5D context loading, hybrid loss, and polynomial learning rate scheduling.
+    """
+    # 1. Dataset Splitting (Stratified by Patient and Device)
     all_files = sorted(os.listdir(config.IMG_DIR))
     train_patients, val_patients, test_patients = get_stratified_splits(all_files)
     
-    with open("test_patients.txt", "w") as f:
-        f.write("\n".join(test_patients))
-    
-    logging.info(f"Split: Train={len(train_patients)}, Val={len(val_patients)}, Test={len(test_patients)}")
-
     def get_paths(patient_list):
         imgs, masks = [], []
         for f in all_files:
@@ -151,15 +143,14 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     train_imgs, train_masks = get_paths(train_patients)
     val_imgs, val_masks = get_paths(val_patients)
 
-    # Dynamic Weights
+    # 2. Weight Initialization
     if config.USE_DYNAMIC_WEIGHTS:
         dyn_weights = calculate_dynamic_weights(train_masks)
-        logging.info(f"Dynamic weights: {dyn_weights}")
         class_weights = torch.tensor(dyn_weights, dtype=torch.float32).to(config.DEVICE)
     else:
         class_weights = torch.tensor(config.CLASS_WEIGHTS).to(config.DEVICE)
 
-    # Augmentation Setup
+    # 3. Augmentation Pipeline (Clinical Precision focused)
     aug_list = []
     if getattr(config, "USE_CLAHE", False):
         aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=0.5))
@@ -175,15 +166,12 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         A.RandomBrightnessContrast(p=config.AUG_PROBS["brightness"]),
         A.GaussNoise(std_range=(0.02, 0.1), p=config.AUG_PROBS["noise"]),
     ])
-    
     train_transform = A.Compose(aug_list)
     
-    val_aug_list = []
-    if getattr(config, "USE_CLAHE", False):
-        val_aug_list.append(A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=1.0))
-    val_aug_list.append(A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1]))
+    val_aug_list = [A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])]
     val_transform = A.Compose(val_aug_list)
 
+    # 4. Model Loading (SegFormer with ImageNet-21k Pre-training)
     processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
     processor.do_reduce_labels = False
 
@@ -202,18 +190,13 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         classifier_dropout_prob=getattr(config, "DROPOUT_RATE", 0.0)
     ).to(config.DEVICE)
 
+    # 5. Optimizer and Hybrid Scheduler (Warmup + Poly Decay)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-    warmup_epochs = getattr(config, "WARMUP_EPOCHS", 5)
-    
-    # Hybrid Scheduler: Linear Warmup + Polynomial Decay (power=0.9)
-    # Aligned with official SegFormer specification (poly decay power 0.9)
     def lr_lambda(current_step):
-        if current_step < warmup_epochs:
-            return float(current_step) / float(max(1, warmup_epochs))
-        # Polynomial decay: (1 - (step - warmup) / (total - warmup)) ^ power
-        progress = float(current_step - warmup_epochs) / float(max(1, epochs - warmup_epochs))
+        if current_step < config.WARMUP_EPOCHS:
+            return float(current_step) / float(max(1, config.WARMUP_EPOCHS))
+        progress = float(current_step - config.WARMUP_EPOCHS) / float(max(1, epochs - config.WARMUP_EPOCHS))
         return max(0.0, (1.0 - progress) ** 0.9)
-
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
@@ -222,14 +205,11 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     boundary_criterion = BoundaryLoss()
 
     best_miou = 0.0
-    patience = 15 # Increased for the final Grand Synthesis run
-    epochs_no_improve = 0
-    start_time = time.time()
     history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
 
+    # 6. Training Loop
     for epoch in range(epochs):
-        epoch_start = time.time()
         model.train()
         epoch_loss = 0
         optimizer.zero_grad()
@@ -239,59 +219,28 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             pixel_values = batch["pixel_values"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
             
-            # Extract anatomical retina mask from the original image (pre-normalized)
-            # This forces the loss to ignore vitreous/sclera noise
-            with torch.no_grad():
-                # batch["orig_img"] is (B, H, W, 3) - use middle channel (original)
-                orig_imgs = batch["orig_img"][:, :, :, 1].cpu().numpy()
-                ret_masks = []
-                for b in range(orig_imgs.shape[0]):
-                    ret_masks.append(get_retina_mask(orig_imgs[b]))
-                ret_masks = torch.from_numpy(np.array(ret_masks)).to(config.DEVICE).float()
-
             with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = torch.nn.functional.interpolate(
                     outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
                 
-                # Apply anatomical mask to focus focal loss
-                # We use a weighted cross-entropy style masking
-                main_loss = focal_criterion(logits, labels, mask=ret_masks)
+                # Hybrid Loss: Focal + Tversky + Optional Boundary
+                main_loss = focal_criterion(logits, labels)
+                aux_loss = tversky_criterion(logits, labels)
                 
-                # Apply direct masking to Tversky and Boundary Loss
-                if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
-                    # Passing logits now, TverskyLoss handles softmax internally
-                    aux_loss = tversky_criterion(logits, labels, mask=ret_masks)
-                else:
-                    aux_loss = dice_loss(logits, labels)
-                
-                # Boundary Loss Integration with Anatomical Masking
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
-                    probs = F.softmax(logits, dim=1)
-                    b_loss = boundary_criterion(probs * ret_masks.unsqueeze(1), labels)
-                    
-                    # Adaptive Boundary Annealing: 
-                    # Start with low boundary weight (0.01) and grow to 0.1 as training progresses
-                    # This allows the model to find fluid first, then refine edges.
+                    # Adaptive annealing: increases boundary weight over time
                     annealed_weight = min(0.1, 0.01 + (epoch * 0.0025))
-                    aux_loss += annealed_weight * b_loss
+                    aux_loss += annealed_weight * boundary_criterion(F.softmax(logits, dim=1), labels)
 
                 loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             
-            # Check for invalid loss before backward
-            if torch.isnan(loss) or torch.isinf(loss):
-                logging.warning(f"Invalid loss detected at epoch {epoch+1}, batch {i}. Skipping batch.")
-                optimizer.zero_grad()
-                continue
-
             scaler.scale(loss).backward()
             
             if (i + 1) % config.ACCUMULATION_STEPS == 0:
-                # Gradient Clipping for stability
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
@@ -301,6 +250,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         
         scheduler.step()
         
+        # 7. Validation and Metrics Calculation
         if (epoch + 1) % config.VAL_INTERVAL == 0:
             model.eval()
             total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
@@ -314,62 +264,41 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                         outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                     )
                     
-                    # Threshold-based assignment
-                    probs = torch.softmax(logits, dim=1).cpu().numpy()
-                    preds = np.zeros(probs.shape[0:1] + probs.shape[2:], dtype=np.uint8)
-                    thresholds = getattr(config, "CLASS_THRESHOLDS", {1: 0.5, 2: 0.5, 3: 0.5})
-                    for c in [3, 2, 1]:
-                        thresh = thresholds.get(c, 0.5)
-                        preds[probs[:, c] > thresh] = c
+                    # Mathematical Argmax for class assignment
+                    preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
 
+                    # Anatomical Post-processing
                     if getattr(config, "MIN_REGION_SIZE", 0) > 0:
                         import cv2
                         cleaned_preds = []
                         kernel = np.ones((3, 3), np.uint8)
-                        
-                        # Fix: Get indices for this batch to fetch raw images for masking
                         batch_start = i * config.BATCH_SIZE
                         batch_indices = list(range(batch_start, min(len(val_ds), batch_start + config.BATCH_SIZE)))
 
                         for b_idx in range(len(preds)):
                             p = preds[b_idx]
-                            
-                            # Fetch the ACTUAL raw [0,1] normalized image
                             orig_img = val_ds.get_raw_image(batch_indices[b_idx])
-                            
-                            # Ensure orig_img matches the prediction shape (H, W)
                             if orig_img.shape != p.shape:
-                                orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]), interpolation=cv2.INTER_LINEAR)
+                                orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]))
                             
                             ret_mask = get_retina_mask(orig_img)
-                            
                             new_p = np.zeros_like(p)
                             for c in range(1, config.NUM_LABELS):
-                                c_mask = (p == c).astype(np.uint8)
-                                c_mask = c_mask * ret_mask
-
-                                # Selective Morphological Smoothing
-                                if getattr(config, "USE_MORPH_SMOOTHING", True):
-                                    # Always close small internal holes
-                                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_CLOSE, kernel)
-                                    
-                                    # Only OPEN (smooth spikes) for IRF (Class 1)
-                                    # SRF and PED remain sharp for clinical fidelity
-                                    if c == 1:
-                                        c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel)
-
-                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
+                                c_mask = ((p == c).astype(np.uint8) * ret_mask)
+                                c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_CLOSE, kernel)
+                                if c == 1: # Smooth only IRF
+                                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel)
+                                
+                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
                                 for lbl in range(1, num_labels):
                                     if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
                                         new_p[labels_im == lbl] = c
                             cleaned_preds.append(new_p)
                         preds = np.array(cleaned_preds)
 
-                    mask = (labels.cpu().numpy() >= 0) & (labels.cpu().numpy() < config.NUM_LABELS)
-                    label_flat = labels.cpu().numpy()[mask].astype(np.int64)
-                    pred_flat = preds[mask].astype(np.int64)
+                    mask_cm = (labels.cpu().numpy() >= 0) & (labels.cpu().numpy() < config.NUM_LABELS)
                     total_cm += np.bincount(
-                        config.NUM_LABELS * label_flat + pred_flat,
+                        config.NUM_LABELS * labels.cpu().numpy()[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64),
                         minlength=config.NUM_LABELS**2
                     ).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
@@ -382,35 +311,14 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             history["loss"].append(avg_loss)
             history["miou"].append(curr_miou)
             
-            epoch_dur = time.time() - epoch_start
-            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | Time: {int(epoch_dur)}s")
+            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f}")
             
             if curr_miou > best_miou:
                 best_miou = curr_miou
                 torch.save(model.state_dict(), save_path)
                 logging.info(f"New best model saved! (mIoU: {best_miou:.4f})")
-                epochs_no_improve = 0
-            else:
-                epochs_no_improve += 1
-                if epochs_no_improve >= patience:
-                    logging.info(f"Early stopping triggered after {epoch+1} epochs!")
-                    break
-        else:
-            avg_loss = epoch_loss / len(train_loader)
-            history["loss"].append(avg_loss)
-            epoch_dur = time.time() - epoch_start
-            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | (Val Skipped) | Time: {int(epoch_dur)}s")
-
-        plt.figure(figsize=(12, 5))
-        plt.subplot(1, 2, 1)
-        plt.plot(history["loss"]); plt.title("Loss History"); plt.xlabel("Epoch"); plt.ylabel("Loss")
-        plt.subplot(1, 2, 2)
-        plt.plot(history["miou"]); plt.title("mIoU History"); plt.xlabel("Epoch"); plt.ylabel("mIoU")
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, "metrics.png"))
-        plt.close()
-
-    logging.info(f"Training complete. Total time: {str(timedelta(seconds=int(time.time() - start_time)))}")
+    
+    logging.info(f"Training complete. Best mIoU: {best_miou:.4f}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

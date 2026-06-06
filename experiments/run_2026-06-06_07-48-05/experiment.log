@@ -1,0 +1,6 @@
+2026-06-06 07:48:05,453 | INFO     | root:main:76 - Pipeline started. Results directory: /home/bgieta/Documents/code/oct-project/experiments/run_2026-06-06_07-48-05
+2026-06-06 07:48:05,453 | INFO     | root:main:79 - Device: AMD Radeon RX 9070 XT
+2026-06-06 07:48:05,453 | INFO     | root:main:81 - GPU Memory: 15.92 GB
+2026-06-06 07:48:05,453 | INFO     | root:main:85 - --- PHASE 1: TRAINING ---
+2026-06-06 07:48:05,701 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-06-06 07:48:06,660 | INFO     | root:train_model:209 - Starting training for 80 epochs...

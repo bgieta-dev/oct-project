@@ -12,7 +12,10 @@ from eval import evaluate_model
 from attention_visualizer import generate_attention_maps
 import config
 
+# --- UTILITY FUNCTIONS ---
+
 def send_discord_notification(message):
+    """Sends experiment status updates to a Discord channel via Webhook"""
     if not config.DISCORD_WEBHOOK_URL:
         return
     try:
@@ -23,6 +26,7 @@ def send_discord_notification(message):
 
 
 def setup_logging(exp_dir):
+    """Configures dual logging: Console (short) and File (verbose)"""
     log_file = os.path.join(exp_dir, "experiment.log")
     
     for handler in logging.root.handlers[:]:
@@ -53,7 +57,17 @@ def setup_logging(exp_dir):
     
     return log_file
 
+# --- MAIN EXECUTION PIPELINE ---
+
 def main():
+    """
+    Orchestrates the full OCT segmentation research pipeline:
+    1. Environment setup and logging
+    2. SegFormer Model Training
+    3. Comprehensive Metric Evaluation
+    4. Transformer Attention Visualization
+    5. Artifact Archiving
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     exp_dir = os.path.abspath(f"experiments/run_{timestamp}")
     os.makedirs(exp_dir, exist_ok=True)
@@ -61,60 +75,54 @@ def main():
     setup_logging(exp_dir)
     logging.info(f"Pipeline started. Results directory: {exp_dir}")
     
-    # Log hardware info
+    # Hardware Diagnostics
     logging.info(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     if torch.cuda.is_available():
         logging.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
 
-    # training
+    # PHASE 1: MODEL TRAINING
     best_model_name = "best_model.pth"
-    logging.info("--- TRAINING ---")
+    logging.info("--- PHASE 1: TRAINING ---")
     train_model(epochs=config.EPOCHS, save_path=best_model_name, output_dir=exp_dir)
     
     if os.path.exists(best_model_name):
         shutil.copy(best_model_name, os.path.join(exp_dir, "best_model.pth"))
 
-    # Force cleanup before evaluation - OOM prevention
+    # Memory Management: Clear VRAM for the evaluation pass
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    # evaluation
-    logging.info("--- EVALUATION ---")
+    # PHASE 2: EVALUATION
+    logging.info("--- PHASE 2: EVALUATION ---")
     metrics = evaluate_model(model_path=best_model_name, output_dir=exp_dir)
     
+    # Log Aggregated Metrics
     logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
     logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
     logging.info(f"Model Parameters: {metrics.get('params', 0):.2f}M")
     
+    # Log Class-Specific Findings (Essential for Thesis Tables)
     for c in [1, 2, 3]:
         name = config.CLASS_NAMES[c]
-        iou = metrics['class_ious'][c]
-        dice = metrics['class_dices'][c]
-        hd = metrics['class_hd95'][c]
-        avg_reg_gt = metrics['class_avg_regions_gt'][c]
-        avg_reg_pred = metrics['class_avg_regions_pred'][c]
-        bp = metrics['class_boundary_precision'][c]
-        area = metrics['class_avg_pixel_area'][c]
-        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f}")
-        logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
+        logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
 
-    # generate attention maps
-    logging.info("--- ATTENTION VISUALIZATION ---")
+    # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
+    logging.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
     att_dir = os.path.join(exp_dir, "attention_maps")
     generate_attention_maps(model_path=best_model_name, output_dir=att_dir)
 
-    # archiving project docs and scripts
-    for f in ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]:
+    # PHASE 4: ARCHIVING
+    # Save the exact version of the code and plan used for this specific run
+    scripts_to_archive = ["README.md", "plan.md", "train.py", "eval.py", "main.py", "dataset.py", "config.py", "test_patients.txt", "attention_visualizer.py", "utils.py"]
+    for f in scripts_to_archive:
         if os.path.exists(f):
             shutil.copy(f, os.path.join(exp_dir, f))
             
-    logging.info(f"Pipeline finished.")
+    logging.info(f"Pipeline finished successfully. Artifacts saved in {exp_dir}")
 
-    # Discord Notification
-    msg = f"**Training Finished!**\nRun: `{os.path.basename(exp_dir)}`\n"
-    msg += f"mIoU: `{metrics['mIoU']:.4f}` | mDice: `{metrics['mDice']:.4f}`\n"
-    msg += f"HD95: `{metrics['mHD95']:.2f}`"
+    # Send Notification
+    msg = f"**OCT Research Update**\nRun: `{os.path.basename(exp_dir)}` completed.\nmDice: `{metrics['mDice']:.4f}` | mHD95: `{metrics['mHD95']:.2f}`"
     send_discord_notification(msg)
 
 if __name__ == "__main__":
