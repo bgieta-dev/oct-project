@@ -11,11 +11,9 @@
 **Goal:** Finalize "Golden Model" results and generate interpretability data (Attention Maps).
 
 #### 1. Model Experiments & Stability
-- [x] **SegFormer-B2 Strategy:** Proven optimal backbone for limited data (Test 11/14).
-- [x] **Regression Fix (Test 16):**
-    - [x] Disabled Boundary Loss (destabilization found in Test 13).
-    - [x] Fixed IRF recall by disabling MORPH_OPEN and reducing MIN_REGION to 10px.
-    - [x] Switched to mathematical Argmax to avoid threshold-masking conflicts.
+- [x] **SegFormer-B2 Strategy:** Proven optimal backbone (Test 11/14).
+- [x] **Test 16 (The Fusion Record):** Broken project record with **0.7621 mIoU** (at epoch 37). Stable Focal-Tversky + Argmax configuration.
+- [ ] **Test 17 (B3 Scale-up):** Final attempt to scale to MiT-B3 using the Test 16 "Stability Fusion" pipeline. Goal: Investigate if increased capacity improves IRF recall without overfitting.
 
 #### 2. Interpretability & Analysis
 - [x] **Attention Maps:** Integrated automated extraction of Transformer attention heatmaps to identify diagnostic focus areas (RPE, FLuid-Tissue interface).

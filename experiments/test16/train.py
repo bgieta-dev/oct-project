@@ -17,7 +17,6 @@ from utils import get_stratified_splits
 import torch.nn.functional as F
 from eval import get_retina_mask
 from scipy.ndimage import distance_transform_edt
-from medpy.metric.binary import hd95
 
 # --- CUSTOM LOSS FUNCTIONS FOR MEDICAL SEGMENTATION ---
 
@@ -206,7 +205,7 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     boundary_criterion = BoundaryLoss()
 
     best_miou = 0.0
-    history = {"loss": [], "miou": [], "mhd95": []}
+    history = {"loss": [], "miou": []}
     logging.info(f"Starting training for {epochs} epochs...")
 
     # 6. Training Loop
@@ -255,21 +254,18 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
         if (epoch + 1) % config.VAL_INTERVAL == 0:
             model.eval()
             total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
-            class_hd95_vals = {1: [], 2: [], 3: []}
-            
             with torch.no_grad():
                 for i, batch in enumerate(val_loader):
                     pixel_values = batch["pixel_values"].to(config.DEVICE)
-                    labels_batch = batch["labels"].to(config.DEVICE)
+                    labels = batch["labels"].to(config.DEVICE)
                     with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                         outputs = model(pixel_values=pixel_values)
                     logits = torch.nn.functional.interpolate(
-                        outputs.logits, size=labels_batch.shape[-2:], mode="bilinear", align_corners=False
+                        outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                     )
                     
                     # Mathematical Argmax for class assignment
                     preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
-                    labels_np = labels_batch.cpu().numpy()
 
                     # Anatomical Post-processing
                     if getattr(config, "MIN_REGION_SIZE", 0) > 0:
@@ -281,7 +277,6 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 
                         for b_idx in range(len(preds)):
                             p = preds[b_idx]
-                            l_np = labels_np[b_idx]
                             orig_img = val_ds.get_raw_image(batch_indices[b_idx])
                             if orig_img.shape != p.shape:
                                 orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]))
@@ -298,19 +293,12 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                                 for lbl in range(1, num_labels):
                                     if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
                                         new_p[labels_im == lbl] = c
-                                
-                                # real-time HD95 accumulation
-                                pred_c = (new_p == c)
-                                gt_c = (l_np == c)
-                                if np.any(pred_c) and np.any(gt_c):
-                                    class_hd95_vals[c].append(hd95(pred_c, gt_c))
-                                    
                             cleaned_preds.append(new_p)
                         preds = np.array(cleaned_preds)
 
-                    mask_cm = (labels_np >= 0) & (labels_np < config.NUM_LABELS)
+                    mask_cm = (labels.cpu().numpy() >= 0) & (labels.cpu().numpy() < config.NUM_LABELS)
                     total_cm += np.bincount(
-                        config.NUM_LABELS * labels_np[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64),
+                        config.NUM_LABELS * labels.cpu().numpy()[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64),
                         minlength=config.NUM_LABELS**2
                     ).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
@@ -319,17 +307,11 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             fn = total_cm.sum(axis=1) - tp
             ious = tp / (tp + fp + fn + 1e-6)
             curr_miou = np.mean(ious)
-            
-            # Aggregate mHD95
-            means = [np.mean(class_hd95_vals[c]) for c in [1, 2, 3] if class_hd95_vals[c]]
-            curr_mhd95 = np.mean(means) if means else 0.0
-            
             avg_loss = epoch_loss / len(train_loader)
             history["loss"].append(avg_loss)
             history["miou"].append(curr_miou)
-            history["mhd95"].append(curr_mhd95)
             
-            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | mHD95: {curr_mhd95:.2f}")
+            logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f}")
             
             if curr_miou > best_miou:
                 best_miou = curr_miou

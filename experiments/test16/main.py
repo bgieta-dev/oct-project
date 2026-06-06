@@ -105,17 +105,7 @@ def main():
     # Log Class-Specific Findings (Essential for Thesis Tables)
     for c in [1, 2, 3]:
         name = config.CLASS_NAMES[c]
-        iou = metrics['class_ious'][c]
-        dice = metrics['class_dices'][c]
-        hd = metrics['class_hd95'][c]
-        asd_val = metrics['class_asd'][c]
-        avg_reg_gt = metrics['class_avg_regions_gt'][c]
-        avg_reg_pred = metrics['class_avg_regions_pred'][c]
-        bp = metrics['class_boundary_precision'][c]
-        area = metrics['class_avg_pixel_area'][c]
-        
-        logging.info(f"Class {c} ({name}) | IoU: {iou:.4f} | Dice: {dice:.4f} | HD95: {hd:.2f} | ASD: {asd_val:.2f}")
-        logging.info(f"  Regions GT/Pred: {avg_reg_gt:.1f}/{avg_reg_pred:.1f} | BP: {bp:.4f} | Avg Area: {area:.1f} px")
+        logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
 
     # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
     logging.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
