@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import albumentations as A
 from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from dataset import OCTDataset
@@ -72,9 +73,8 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
     # 3. Setup Dataset
     val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
-    import albumentations as A
     dataset = OCTDataset(test_imgs, test_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
-    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
+    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
 
     # 4. State
     total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
@@ -89,7 +89,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     # Vis Selection
     vis_indices = {}
     class_max_counts = {1: 0, 2: 0, 3: 0}
-    for idx in range(min(50, len(dataset))): # Limit scan for speed
+    for idx in range(min(50, len(dataset))):
         m = dataset.get_raw_mask(idx)
         for c in [1, 2, 3]:
             cnt = np.sum(m == c)
@@ -109,7 +109,6 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear")
             attentions = outputs.attentions[-1]
             
-            # Att map logic
             avg_att = torch.mean(attentions, dim=1)
             spatial_att = torch.mean(avg_att, dim=1)
             grid_size = int(np.sqrt(spatial_att.shape[1]))
@@ -140,10 +139,10 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             mask = (labels >= 0) & (labels < config.NUM_LABELS)
             total_cm += np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
-            # Simple fluid iou for vis tracking
-            img_tp = np.diag(np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS))
-            img_fp = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS).sum(axis=0) - img_tp
-            img_fn = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS).sum(axis=1) - img_tp
+            img_counts = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
+            img_tp = np.diag(img_counts)
+            img_fp = img_counts.sum(axis=0) - img_tp
+            img_fn = img_counts.sum(axis=1) - img_tp
             img_iou = np.mean(img_tp[1:] / (img_tp[1:] + img_fp[1:] + img_fn[1:] + 1e-6))
             image_metrics.append((img_iou, global_idx, orig_img, labels, pred, att_map))
 
@@ -165,15 +164,17 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     # Visualization
     plt.figure(figsize=(16, 12))
     for c_id, target_idx in vis_indices.items():
-        match = [m for m in image_metrics if m[1] == target_idx][0]
-        _, _, img, gt, prd, att = match
+        match = [m for m in image_metrics if m[1] == target_idx]
+        if not match: continue
+        _, _, img, gt, prd, att = match[0]
         pos = c_id - 1
         vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        plt.subplot(3, 4, pos*4+1); plt.imshow(vis_img); plt.axis("off")
-        plt.subplot(3, 4, pos*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off")
-        plt.subplot(3, 4, pos*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off")
+        plt.subplot(3, 4, pos*4+1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title(f"OCT {config.CLASS_NAMES[c_id]}")
+        plt.subplot(3, 4, pos*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
+        plt.subplot(3, 4, pos*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Prediction")
         att_norm = (cv2.resize(att, (512,512)) - att.min()) / (att.max() - att.min() + 1e-8)
-        plt.subplot(3, 4, pos*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off")
+        plt.subplot(3, 4, pos*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off"); plt.title("Attention")
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "predictions.png")); plt.close()
 
     # Failures
@@ -182,7 +183,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     for i, (iou_val, g_idx, img, gt, prd, _) in enumerate(image_metrics[:5]):
         plt.figure(figsize=(12, 4))
         vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        plt.subplot(1,3,1); plt.imshow(vis_img); plt.axis("off")
+        plt.subplot(1,3,1); plt.imshow(vis_img, cmap="gray"); plt.axis("off")
         plt.subplot(1,3,2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off")
         plt.subplot(1,3,3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.title(f"IoU: {iou_val:.2f}"); plt.axis("off")
         plt.savefig(os.path.join(fail_dir, f"failure_{i+1}.png")); plt.close()
@@ -208,4 +209,28 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     }
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO); print(evaluate_model())
+    import sys
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    eval_dir = os.path.abspath(f"eval_results_{timestamp}")
+    os.makedirs(eval_dir, exist_ok=True)
+    log_file = os.path.join(eval_dir, "eval_standalone.log")
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)])
+    logging.info(f"Starting Standalone Evaluation. Artifacts: {eval_dir}")
+    target_model = "best_model.pth"
+    if not os.path.exists(target_model):
+        logging.error(f"Model {target_model} not found!"); sys.exit(1)
+    try:
+        metrics = evaluate_model(model_path=target_model, output_dir=eval_dir)
+        logging.info("--- EVALUATION RESULTS ---")
+        logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
+        logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
+        logging.info("--- CLASS-SPECIFIC FINDINGS ---")
+        for c in [1, 2, 3]:
+            name = config.CLASS_NAMES[c]
+            logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
+        logging.info(f"Evaluation complete. Files saved to: {eval_dir}")
+    except Exception as e:
+        import traceback
+        logging.error(traceback.format_exc())

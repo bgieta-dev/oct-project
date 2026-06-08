@@ -142,8 +142,8 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
 
     train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, use_multimodal=config.USE_MULTIMODAL)
     val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
-    train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=0, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=-1, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=config.BATCH_SIZE, num_workers=-1, pin_memory=True)
 
     model = SegformerForSemanticSegmentation.from_pretrained(
         config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True,
