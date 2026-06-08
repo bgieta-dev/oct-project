@@ -1,6 +1,8 @@
 import os
 import torch
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') # Ensure non-interactive backend for server/CLI usage
 import matplotlib.pyplot as plt
 import albumentations as A
 from torch.utils.data import DataLoader
@@ -65,6 +67,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True, output_attentions=True)
     
     if os.path.exists(model_path):
+        logging.info(f"Loading weights from {model_path}")
         state_dict = torch.load(model_path, map_location=config.DEVICE, weights_only=True)
         model.load_state_dict(state_dict, strict=False)
     
@@ -83,21 +86,11 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     class_region_counts_gt = {1: [], 2: [], 3: []}
     class_region_counts_pred = {1: [], 2: [], 3: []}
     class_boundary_diffs = {1: [], 2: [], 3: []}
-    class_pixel_areas_gt = {1: [], 2: [], 3: []}
-    image_metrics = []
-    
-    # Vis Selection
-    vis_indices = {}
-    class_max_counts = {1: 0, 2: 0, 3: 0}
-    for idx in range(min(50, len(dataset))):
-        m = dataset.get_raw_mask(idx)
-        for c in [1, 2, 3]:
-            cnt = np.sum(m == c)
-            if cnt > class_max_counts[c]:
-                class_max_counts[c] = cnt; vis_indices[c] = idx
+    class_pixel_areas_gt = {1: [], 2: [] , 3: []}
+    image_metrics = [] # Stores: (iou, idx, img, gt, pred, attention)
 
     # 5. Evaluation Loop
-    logging.info("Evaluating...")
+    logging.info(f"Evaluating on {len(dataset)} slices...")
     global_idx = 0
     for batch in tqdm(loader):
         pixel_values = batch["pixel_values"].to(config.DEVICE)
@@ -109,6 +102,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear")
             attentions = outputs.attentions[-1]
             
+            # Extract spatial attention
             avg_att = torch.mean(attentions, dim=1)
             spatial_att = torch.mean(avg_att, dim=1)
             grid_size = int(np.sqrt(spatial_att.shape[1]))
@@ -124,10 +118,13 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                 new_p = np.zeros_like(p)
                 for c in range(1, config.NUM_LABELS):
                     c_mask = ((p == c).astype(np.uint8) * ret_mask)
-                    num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
-                    for label in range(1, num_labels):
-                        if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
-                            new_p[labels_im == label] = c
+                    if config.MIN_REGION_SIZE > 0:
+                        num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                        for label in range(1, num_labels):
+                            if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                                new_p[labels_im == label] = c
+                    else:
+                        new_p[c_mask > 0] = c
                 cleaned_preds.append(new_p)
             preds_batch = np.array(cleaned_preds)
 
@@ -139,11 +136,15 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             mask = (labels >= 0) & (labels < config.NUM_LABELS)
             total_cm += np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
+            # Slice-level metric for ranking
             img_counts = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             img_tp = np.diag(img_counts)
             img_fp = img_counts.sum(axis=0) - img_tp
             img_fn = img_counts.sum(axis=1) - img_tp
             img_iou = np.mean(img_tp[1:] / (img_tp[1:] + img_fp[1:] + img_fn[1:] + 1e-6))
+            
+            # Store data for visualization (Keep memory lean: only 1 in 5 or specific ones if needed)
+            # For small datasets, we store all to pick best.
             image_metrics.append((img_iou, global_idx, orig_img, labels, pred, att_map))
 
             for c in [1, 2, 3]:
@@ -161,34 +162,54 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                     class_asd_vals[c].append(asd(pred_c, gt_c))
             global_idx += 1
 
-    # Visualization
-    plt.figure(figsize=(16, 12))
-    for c_id, target_idx in vis_indices.items():
-        match = [m for m in image_metrics if m[1] == target_idx]
-        if not match: continue
-        _, _, img, gt, prd, att = match[0]
-        pos = c_id - 1
-        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        plt.subplot(3, 4, pos*4+1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title(f"OCT {config.CLASS_NAMES[c_id]}")
-        plt.subplot(3, 4, pos*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
-        plt.subplot(3, 4, pos*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Prediction")
-        att_norm = (cv2.resize(att, (512,512)) - att.min()) / (att.max() - att.min() + 1e-8)
-        plt.subplot(3, 4, pos*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off"); plt.title("Attention")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "predictions.png")); plt.close()
+    # 6. Visualization - Pick BEST examples from the FULL test set
+    logging.info("Generating visualizations...")
+    vis_indices = {}
+    for c in [1, 2, 3]:
+        # Find index with MOST pixels for class c to show clear pathology
+        best_pos = -1
+        max_px = 0
+        for i, m in enumerate(image_metrics):
+            px_count = np.sum(m[3] == c)
+            if px_count > max_px:
+                max_px = px_count
+                best_pos = i
+        if best_pos != -1:
+            vis_indices[c] = best_pos
 
-    # Failures
+    if not vis_indices:
+        logging.warning("No pathology found in test set! Picking first 3 images for predictions.png")
+        for i in range(min(3, len(image_metrics))): vis_indices[i+1] = i
+
+    plt.figure(figsize=(16, 12))
+    for i, (c_id, list_pos) in enumerate(vis_indices.items()):
+        iou, _, img, gt, prd, att = image_metrics[list_pos]
+        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
+        
+        plt.subplot(3, 4, i*4+1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title(f"OCT: {config.CLASS_NAMES[c_id]}")
+        plt.subplot(3, 4, i*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
+        plt.subplot(3, 4, i*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title(f"Pred (IoU: {iou:.2f})")
+        
+        # Overlay Attention
+        att_norm = (cv2.resize(att, (vis_img.shape[1], vis_img.shape[0])) - att.min()) / (att.max() - att.min() + 1e-8)
+        plt.subplot(3, 4, i*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off"); plt.title("Attention Map")
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=150)
+    plt.close()
+
+    # 7. Failure Analysis (Top 5 worst)
     fail_dir = os.path.join(output_dir, "failures"); os.makedirs(fail_dir, exist_ok=True)
-    image_metrics.sort(key=lambda x: x[0])
-    for i, (iou_val, g_idx, img, gt, prd, _) in enumerate(image_metrics[:5]):
+    image_metrics.sort(key=lambda x: x[0]) # Sort by IoU ascending
+    for i, (iou_val, _, img, gt, prd, _) in enumerate(image_metrics[:5]):
         plt.figure(figsize=(12, 4))
         vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        plt.subplot(1,3,1); plt.imshow(vis_img, cmap="gray"); plt.axis("off")
-        plt.subplot(1,3,2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off")
-        plt.subplot(1,3,3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.title(f"IoU: {iou_val:.2f}"); plt.axis("off")
-        plt.savefig(os.path.join(fail_dir, f"failure_{i+1}.png")); plt.close()
+        plt.subplot(1,3,1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title("OCT")
+        plt.subplot(1,3,2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
+        plt.subplot(1,3,3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title(f"Pred (IoU: {iou_val:.2f})")
+        plt.savefig(os.path.join(fail_dir, f"failure_{i+1}_iou_{iou_val:.2f}.png")); plt.close()
 
-    # Results
+    # 8. Aggregate Metrics
     tp = np.diag(total_cm)
     fp, fn = total_cm.sum(axis=0) - tp, total_cm.sum(axis=1) - tp
     ious, dices = tp/(tp+fp+fn+1e-6), (2*tp)/(2*tp+fp+fn+1e-6)
@@ -214,13 +235,16 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     eval_dir = os.path.abspath(f"eval_results_{timestamp}")
     os.makedirs(eval_dir, exist_ok=True)
+    
     log_file = os.path.join(eval_dir, "eval_standalone.log")
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
         handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)])
-    logging.info(f"Starting Standalone Evaluation. Artifacts: {eval_dir}")
+    
+    logging.info(f"Starting Standalone Evaluation. Results will be in: {eval_dir}")
     target_model = "best_model.pth"
     if not os.path.exists(target_model):
-        logging.error(f"Model {target_model} not found!"); sys.exit(1)
+        logging.error(f"Model {target_model} not found! Please place best_model.pth in the project root."); sys.exit(1)
+        
     try:
         metrics = evaluate_model(model_path=target_model, output_dir=eval_dir)
         logging.info("--- EVALUATION RESULTS ---")
@@ -230,7 +254,8 @@ if __name__ == "__main__":
         for c in [1, 2, 3]:
             name = config.CLASS_NAMES[c]
             logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
-        logging.info(f"Evaluation complete. Files saved to: {eval_dir}")
+        logging.info(f"Evaluation complete. Artifacts saved in: {eval_dir}")
     except Exception as e:
         import traceback
+        logging.error("CRITICAL ERROR in standalone evaluation:")
         logging.error(traceback.format_exc())
