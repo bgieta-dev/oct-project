@@ -161,23 +161,38 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
             
+            # --- MORPHOLOGICAL SHARPENING FOR PED (Class 3) ---
+            # SegFormer's bilinear upsampling smooths out sharp peaks. We apply a sharpening 
+            # filter to the PED probability map to restore the "spiky" clinical appearance.
+            sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+            for b_idx in range(probs_batch.shape[0]):
+                ped_prob = probs_batch[b_idx, 3, :, :]
+                sharp_ped = cv2.filter2D(ped_prob, -1, sharpen_kernel)
+                probs_batch[b_idx, 3, :, :] = np.clip(sharp_ped, 0, 1)
+
             # [CLINICAL UPDATE] Threshold-based prediction to maximize recall instead of simple argmax
             preds_batch = np.zeros(probs_batch.shape[0:1] + probs_batch.shape[2:], dtype=np.uint8)
             thresholds = getattr(config, "CLASS_THRESHOLDS", {1: 0.5, 2: 0.5, 3: 0.5})
             
             # Apply in reverse priority. IRF (1) is applied last so it overwrites background/others
-            # if it crosses the low 0.30 threshold.
             for c in [3, 2, 1]:
                 thresh = thresholds.get(c, 0.5)
                 preds_batch[probs_batch[:, c] > thresh] = c
             
             if getattr(config, "MIN_REGION_SIZE", 0) > 0:
                 cleaned_preds = []
+                kernel_3x3 = np.ones((3, 3), np.uint8)
                 for b_idx in range(len(preds_batch)):
                     p = preds_batch[b_idx]
                     new_p = np.zeros_like(p)
                     for c in range(1, config.NUM_LABELS):
                         c_mask = (p == c).astype(np.uint8)
+                        
+                        # --- MORPHOLOGICAL SEPARATION FOR IRF (Class 1) ---
+                        # Break thin bridges that cause distinct cysts to merge into one blob.
+                        if c == 1:
+                            c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
+                            
                         num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
                         for label in range(1, num_labels):
                             if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
