@@ -2,7 +2,7 @@ import os
 import torch
 import numpy as np
 import matplotlib
-matplotlib.use('Agg') # Ensure non-interactive backend for server/CLI usage
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import albumentations as A
 from torch.utils.data import DataLoader
@@ -15,6 +15,7 @@ from utils import get_stratified_splits
 import logging
 from scipy import ndimage
 import cv2
+from PIL import Image
 
 # --- CLINICAL METRIC ANALYZERS ---
 
@@ -24,6 +25,9 @@ class BoundaryPrecisionAnalyzer:
 
     def get_boundary_contrast(self, image, mask):
         if not np.any(mask): return 0.0
+        # For 2.5D image, use the central slice for boundary analysis
+        if image.ndim == 3 and image.shape[2] == 3:
+            image = image[:, :, 1]
         dilated = cv2.dilate(mask.astype(np.uint8), self.kernel, iterations=1)
         eroded = cv2.erode(mask.astype(np.uint8), self.kernel, iterations=1)
         outer_edge = dilated - mask.astype(np.uint8)
@@ -34,6 +38,8 @@ class BoundaryPrecisionAnalyzer:
         return np.abs(np.mean(inner_vals) - np.mean(outer_vals))
 
 def get_retina_mask(img):
+    if img.ndim == 3 and img.shape[2] == 3:
+        img = img[:, :, 1] # Use central slice for mask
     img_f = img.astype(np.float32)
     if img_f.max() > 1.0: img_f /= 255.0
     blurred = cv2.GaussianBlur(img_f, (31, 31), 0)
@@ -62,6 +68,19 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     test_imgs = [os.path.join(config.IMG_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
     test_masks = [os.path.join(config.MASK_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
 
+    # [REPLICATION] Scan raw masks for vis indices (Exactly like Test 15)
+    logging.info("Replicating Test 15 slice selection (scanning raw masks)...")
+    class_max_counts = {1: 0, 2: 0, 3: 0}
+    vis_indices = {1: -1, 2: -1, 3: -1}
+    for i, m_path in enumerate(test_masks):
+        m = np.array(Image.open(m_path))
+        for c in [1, 2, 3]:
+            cnt = np.sum(m == c)
+            if cnt > class_max_counts[c]:
+                class_max_counts[c] = cnt
+                vis_indices[c] = i
+    logging.info(f"Fixed vis indices to match Test 15: {vis_indices}")
+
     # 2. Model Init
     processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
     model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True, output_attentions=True)
@@ -87,7 +106,9 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
     class_region_counts_pred = {1: [], 2: [], 3: []}
     class_boundary_diffs = {1: [], 2: [], 3: []}
     class_pixel_areas_gt = {1: [], 2: [] , 3: []}
-    image_metrics = [] # Stores: (iou, idx, img, gt, pred, attention)
+    
+    # Store visualization data separately for target indices
+    vis_data = {} 
 
     # 5. Evaluation Loop
     logging.info(f"Evaluating on {len(dataset)} slices...")
@@ -100,11 +121,12 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values)
             logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear")
-            attentions = outputs.attentions[-1]
             
-            # Extract spatial attention
-            avg_att = torch.mean(attentions, dim=1)
-            spatial_att = torch.mean(avg_att, dim=1)
+            # [FIX] Better Attention Map: Use Stage 2 (64x64) for better detail than Stage 4 (16x16)
+            # attentions is a list of 4 stages. Stage 1 is index 1.
+            att_stage = outputs.attentions[1] 
+            avg_att = torch.mean(att_stage, dim=1) # Mean over heads
+            spatial_att = torch.mean(avg_att, dim=1) # Mean over queries
             grid_size = int(np.sqrt(spatial_att.shape[1]))
             att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
             
@@ -131,28 +153,21 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         for b_idx in range(len(preds_batch)):
             labels, pred, att_map = labels_batch[b_idx], preds_batch[b_idx], att_maps[b_idx]
             orig_img = orig_img_batch[b_idx]
-            central_img = orig_img[:, :, 1] if config.USE_25D else orig_img[:, :, 0]
             
+            # Check if this is a target index for visualization
+            for c_key, t_idx in vis_indices.items():
+                if global_idx == t_idx:
+                    vis_data[c_key] = (orig_img, labels, pred, att_map)
+
             mask = (labels >= 0) & (labels < config.NUM_LABELS)
             total_cm += np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
-            
-            # Slice-level metric for ranking
-            img_counts = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
-            img_tp = np.diag(img_counts)
-            img_fp = img_counts.sum(axis=0) - img_tp
-            img_fn = img_counts.sum(axis=1) - img_tp
-            img_iou = np.mean(img_tp[1:] / (img_tp[1:] + img_fp[1:] + img_fn[1:] + 1e-6))
-            
-            # Store data for visualization (Keep memory lean: only 1 in 5 or specific ones if needed)
-            # For small datasets, we store all to pick best.
-            image_metrics.append((img_iou, global_idx, orig_img, labels, pred, att_map))
 
             for c in [1, 2, 3]:
                 gt_c, pred_c = (labels == c), (pred == c)
                 if np.any(gt_c):
                     _, gt_num = ndimage.label(gt_c)
                     class_region_counts_gt[c].append(gt_num)
-                    class_boundary_diffs[c].append(BoundaryPrecisionAnalyzer().get_boundary_contrast(central_img, gt_c))
+                    class_boundary_diffs[c].append(BoundaryPrecisionAnalyzer().get_boundary_contrast(orig_img, gt_c))
                     class_pixel_areas_gt[c].append(np.sum(gt_c))
                 if np.any(pred_c):
                     _, pred_num = ndimage.label(pred_c)
@@ -162,77 +177,54 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                     class_asd_vals[c].append(asd(pred_c, gt_c))
             global_idx += 1
 
-    # 6. Visualization - Pick BEST examples based on MAXIMUM AREA (Matching test15 behavior)
-    logging.info("Selecting representative slices for predictions.png (Max Area logic)...")
-    vis_indices = {}
-    for c in [1, 2, 3]:
-        # Find index with ABSOLUTE MAXIMUM pixels for class c across entire dataset
-        best_pos = -1
-        max_px = 0
-        for i, m in enumerate(image_metrics):
-            px_count = np.sum(m[3] == c) # m[3] is the Ground Truth mask
-            if px_count > max_px:
-                max_px = px_count
-                best_pos = i
+    # 6. Replicated Visualization Grid
+    logging.info("Generating predictions.png (Exact Test 15 indices)...")
+    plt.figure(figsize=(22, 16))
+    for i, c_id in enumerate([1, 2, 3]):
+        if c_id not in vis_data: continue
+        img, gt, prd, att = vis_data[c_id]
         
-        if best_pos != -1:
-            vis_indices[c] = best_pos
-
-    if not vis_indices:
-        logging.warning("No pathology found in test set! Picking first slices.")
-        for i in range(min(3, len(image_metrics))): vis_indices[i+1] = i
-
-    plt.figure(figsize=(20, 15))
-    for i, (c_id, list_pos) in enumerate(vis_indices.items()):
-        iou_val, _, img, gt, prd, att = image_metrics[list_pos]
-        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        
-        # Display OCT
+        # Display OCT - Restore colored 2.5D view if applicable
         ax1 = plt.subplot(3, 4, i*4+1)
-        ax1.imshow(vis_img, cmap="gray")
-        ax1.set_title(f"Class: {config.CLASS_NAMES[c_id]}", fontsize=14, fontweight='bold')
+        ax1.imshow(img) # Restore RGB/2.5D view to match Test 15
+        ax1.set_title(f"OCT: {config.CLASS_NAMES[c_id]}", fontsize=14, fontweight='bold')
         ax1.axis("off")
         
         # Display Ground Truth
         ax2 = plt.subplot(3, 4, i*4+2)
         ax2.imshow(gt, cmap="jet", vmin=0, vmax=3)
-        ax2.set_title("Manual Annotation (GT)", fontsize=12)
+        ax2.set_title(f"GT (px: {class_max_counts[c_id]})", fontsize=12)
         ax2.axis("off")
         
         # Display Prediction
+        tp = np.sum((gt == c_id) & (prd == c_id))
+        fp = np.sum((gt != c_id) & (prd == c_id))
+        fn = np.sum((gt == c_id) & (prd != c_id))
+        c_iou = tp / (tp + fp + fn + 1e-6)
+        
         ax3 = plt.subplot(3, 4, i*4+3)
         ax3.imshow(prd, cmap="jet", vmin=0, vmax=3)
-        ax3.set_title(f"Model Prediction (IoU: {iou_val:.2f})", fontsize=12)
+        ax3.set_title(f"Prediction (IoU: {c_iou:.2f})", fontsize=12)
         ax3.axis("off")
         
-        # Display Attention Overlay (Enhanced Contrast)
+        # Display Shaper Attention Map (Stage 2)
         ax4 = plt.subplot(3, 4, i*4+4)
-        # Power-transform attention for better visibility of "hot" spots
-        att_resized = cv2.resize(att, (vis_img.shape[1], vis_img.shape[0]))
+        att_resized = cv2.resize(att, (img.shape[1], img.shape[0]))
         att_norm = (att_resized - att_resized.min()) / (att_resized.max() - att_resized.min() + 1e-8)
-        att_norm = np.power(att_norm, 0.7) # Enhance mid-tones
+        att_norm = np.power(att_norm, 0.6) # Even higher contrast for Stage 2
         
-        ax4.imshow(vis_img, cmap="gray")
-        ax4.imshow(att_norm, cmap="jet", alpha=0.45)
-        ax4.set_title("Self-Attention Heatmap", fontsize=12)
+        # Use grayscale for attention background for clarity
+        gray_bg = img[:, :, 1] if img.ndim == 3 else img
+        ax4.imshow(gray_bg, cmap="gray")
+        ax4.imshow(att_norm, cmap="jet", alpha=0.5)
+        ax4.set_title("Self-Attention (Stage 2)", fontsize=12)
         ax4.axis("off")
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=200, bbox_inches='tight')
     plt.close()
 
-    # 7. Failure Analysis (Top 5 worst)
-    fail_dir = os.path.join(output_dir, "failures"); os.makedirs(fail_dir, exist_ok=True)
-    image_metrics.sort(key=lambda x: x[0]) # Sort by IoU ascending
-    for i, (iou_val, _, img, gt, prd, _) in enumerate(image_metrics[:5]):
-        plt.figure(figsize=(12, 4))
-        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
-        plt.subplot(1,3,1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title("OCT")
-        plt.subplot(1,3,2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
-        plt.subplot(1,3,3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title(f"Pred (IoU: {iou_val:.2f})")
-        plt.savefig(os.path.join(fail_dir, f"failure_{i+1}_iou_{iou_val:.2f}.png")); plt.close()
-
-    # 8. Aggregate Metrics
+    # 7. Aggregate Metrics
     tp = np.diag(total_cm)
     fp, fn = total_cm.sum(axis=0) - tp, total_cm.sum(axis=1) - tp
     ious, dices = tp/(tp+fp+fn+1e-6), (2*tp)/(2*tp+fp+fn+1e-6)
