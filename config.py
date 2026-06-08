@@ -10,52 +10,49 @@ IMG_DIR = os.path.join(DATA_DIR, "cropped_images")
 MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 
 # --- SEGFORMER ARCHITECTURE CONFIGURATION ---
-# Model: MiT-B3 (Mix Vision Transformer). 
-# Test 17: Scaling up to B3 (~44M parameters) using the stabilized Test 16 pipeline.
+# Model: MiT-B2 (Golden Model for Stability)
 MODEL_NAME = "nvidia/mit-b2" 
 NUM_LABELS = 4
 USE_MULTIMODAL = True
-# 2.5D Logic: Utilizing 3 adjacent B-scans as input channels (t-1, t, t+1).
 USE_25D = True 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- TRAINING HYPERPARAMETERS ---
-LR = 5e-5 # Slightly lower LR for B3 stability
+LR = 5e-5
 EPOCHS = 80
 OPTIMIZER_TYPE = "AdamW" 
 USE_AMP = True 
 VAL_INTERVAL = 1 
 
 # --- LOSS FUNCTION STRATEGY ---
-USE_DYNAMIC_WEIGHTS = False 
+USE_DYNAMIC_WEIGHTS = True 
 USE_CLAHE = True 
 USE_TVERSKY = True 
 USE_FOCAL_TVERSKY = True 
-USE_BOUNDARY_LOSS = False # Disabled per Test 13/15 lessons.
+USE_BOUNDARY_LOSS = False
 BOUNDARY_ALPHA = 0.1     
 
-# Focal Gamma: 2.0 (Balanced focus)
-FOCAL_GAMMA = 2.0 
-# [MODIFICATION] Increased to 0.3 to prevent B3 from memorizing noise on the small RETOUCH set.
-DROPOUT_RATE = 0.3 
+FOCAL_GAMMA = 3.0 
+DROPOUT_RATE = 0.2 
 WARMUP_EPOCHS = 15 
 
 # --- CLASS DEFINITIONS AND CLINICAL WEIGHTS ---
 CLASS_NAMES = {0: "Background", 1: "IRF", 2: "SRF", 3: "PED"}
-# Static Weights (Test 16 success): Higher background penalty (0.5) to keep HD95 low.
-CLASS_WEIGHTS = [0.5, 5.0, 2.0, 2.0] 
-TVERSKY_ALPHA = 0.3 
-TVERSKY_BETA = 0.7 
+CLASS_WEIGHTS = [0.2, 5.0, 2.0, 2.0] 
+# CLINICAL HIGH RECALL SETUP: High penalty for False Negatives (Beta), low for False Positives (Alpha)
+TVERSKY_ALPHA = 0.1 
+TVERSKY_BETA = 0.9 
 
 # --- EVALUATION AND POST-PROCESSING ---
-# [MODIFICATION] Reduced to 5px. B3 has higher capacity for detail; we want to preserve its precise detections.
-MIN_REGION_SIZE = 5 
+MIN_REGION_SIZE = 50 
 USE_TTA = True 
-TTA_SCALES = [0.75, 1.0, 1.25, 1.5] 
-USE_SOFT_CRF = True # Edge-aware smoothing
+TTA_SCALES = [0.8, 1.0, 1.2] 
+USE_SOFT_CRF = False # Disabled due to pydensecrf compilation issues on py3.13
+CRF_ITERATIONS = 5 # How hard to snap to edges
 
-# Class thresholds for manual calibration (optional fallback)
-CLASS_THRESHOLDS = {1: 0.35, 2: 0.50, 3: 0.50} 
+# CLINICAL HIGH RECALL: Lower thresholds force the model to predict fluid even with lower confidence
+# IRF is particularly dangerous to miss, so it triggers at just 30% confidence.
+CLASS_THRESHOLDS = {1: 0.30, 2: 0.40, 3: 0.40} 
 
 # --- DATA AUGMENTATION SETTINGS ---
 AUG_SIZE = (512, 512)

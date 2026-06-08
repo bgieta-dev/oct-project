@@ -120,7 +120,7 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
         
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values)
-            logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear")
+            logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False)
             
             # [FIX] Better Attention Map: Use Stage 2 (64x64) for better detail than Stage 4 (16x16)
             # attentions is a list of 4 stages. Stage 1 is index 1.
@@ -130,25 +130,60 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             grid_size = int(np.sqrt(spatial_att.shape[1]))
             att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
             
-            probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
-            preds_batch = np.argmax(probs_batch, axis=1).astype(np.uint8)
+            if getattr(config, "USE_TTA", False):
+                scales = getattr(config, "TTA_SCALES", [1.0])
+                all_logits = []
+                
+                for s in scales:
+                    if s != 1.0:
+                        scaled_size = (int(config.AUG_SIZE[0] * s), int(config.AUG_SIZE[1] * s))
+                        scaled_pixels = torch.nn.functional.interpolate(
+                            pixel_values, size=scaled_size, mode="bilinear", align_corners=False
+                        )
+                    else:
+                        scaled_pixels = pixel_values
+                    
+                    s_outputs = model(pixel_values=scaled_pixels)
+                    s_logits = torch.nn.functional.interpolate(
+                        s_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                    )
+                    all_logits.append(s_logits)
+                    
+                    f_pixels = torch.flip(scaled_pixels, [3])
+                    f_outputs = model(pixel_values=f_pixels)
+                    f_logits = torch.nn.functional.interpolate(
+                        f_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                    )
+                    uf_logits = torch.flip(f_logits, [3])
+                    all_logits.append(uf_logits)
+                
+                logits = torch.mean(torch.stack(all_logits), dim=0)
             
-            cleaned_preds = []
-            for b_idx in range(len(preds_batch)):
-                p = preds_batch[b_idx]
-                ret_mask = get_retina_mask(orig_img_batch[b_idx])
-                new_p = np.zeros_like(p)
-                for c in range(1, config.NUM_LABELS):
-                    c_mask = ((p == c).astype(np.uint8) * ret_mask)
-                    if config.MIN_REGION_SIZE > 0:
+            probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
+            
+            # [CLINICAL UPDATE] Threshold-based prediction to maximize recall instead of simple argmax
+            preds_batch = np.zeros(probs_batch.shape[0:1] + probs_batch.shape[2:], dtype=np.uint8)
+            thresholds = getattr(config, "CLASS_THRESHOLDS", {1: 0.5, 2: 0.5, 3: 0.5})
+            
+            # Apply in reverse priority. IRF (1) is applied last so it overwrites background/others
+            # if it crosses the low 0.30 threshold.
+            for c in [3, 2, 1]:
+                thresh = thresholds.get(c, 0.5)
+                preds_batch[probs_batch[:, c] > thresh] = c
+            
+            if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+                cleaned_preds = []
+                for b_idx in range(len(preds_batch)):
+                    p = preds_batch[b_idx]
+                    new_p = np.zeros_like(p)
+                    for c in range(1, config.NUM_LABELS):
+                        c_mask = (p == c).astype(np.uint8)
                         num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
                         for label in range(1, num_labels):
                             if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
                                 new_p[labels_im == label] = c
-                    else:
-                        new_p[c_mask > 0] = c
-                cleaned_preds.append(new_p)
-            preds_batch = np.array(cleaned_preds)
+                    cleaned_preds.append(new_p)
+                preds_batch = np.array(cleaned_preds)
 
         for b_idx in range(len(preds_batch)):
             labels, pred, att_map = labels_batch[b_idx], preds_batch[b_idx], att_maps[b_idx]

@@ -19,6 +19,7 @@ from eval import get_retina_mask
 from scipy.ndimage import distance_transform_edt
 from medpy.metric.binary import hd95
 import cv2
+from transformers import get_cosine_schedule_with_warmup
 
 # --- CUSTOM LOSS FUNCTIONS FOR MEDICAL SEGMENTATION ---
 
@@ -153,11 +154,11 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
     ).to(config.DEVICE)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR, weight_decay=5e-2)
-    def lr_lambda(current_step):
-        if current_step < config.WARMUP_EPOCHS: return float(current_step) / float(max(1, config.WARMUP_EPOCHS))
-        progress = float(current_step - config.WARMUP_EPOCHS) / float(max(1, epochs - config.WARMUP_EPOCHS))
-        return max(0.0, (1.0 - progress) ** 0.9)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=config.WARMUP_EPOCHS, 
+        num_training_steps=epochs
+    )
     
     scaler = torch.amp.GradScaler('cuda', enabled=config.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(config, "FOCAL_GAMMA", 2.0))
@@ -178,10 +179,16 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
             with torch.amp.autocast('cuda', enabled=config.USE_AMP):
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = torch.nn.functional.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
-                main_loss = focal_criterion(logits, labels)
-                aux_loss = tversky_criterion(logits, labels)
+                main_loss = 0.5 * focal_criterion(logits, labels)
+                
+                if getattr(config, "USE_TVERSKY", False) or getattr(config, "USE_FOCAL_TVERSKY", False):
+                    aux_loss = 0.5 * tversky_criterion(logits, labels)
+                else:
+                    aux_loss = 0.0
+                    
                 if getattr(config, "USE_BOUNDARY_LOSS", False):
                     aux_loss += min(0.1, 0.01 + (epoch * 0.0025)) * boundary_criterion(F.softmax(logits, dim=1), labels)
+                
                 loss = (main_loss + aux_loss) / config.ACCUMULATION_STEPS
             scaler.scale(loss).backward()
             if (i + 1) % config.ACCUMULATION_STEPS == 0:
@@ -208,30 +215,25 @@ def train_model(epochs=config.EPOCHS, save_path="best_model.pth", output_dir="."
                     preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
                     labels_np = labels_batch.cpu().numpy()
                     
-                    cleaned_preds = []
-                    for b_idx in range(len(preds)):
-                        p, l_np = preds[b_idx], labels_np[b_idx]
-                        orig_img = val_ds.get_raw_image(i * config.BATCH_SIZE + b_idx)
-                        if orig_img.shape != p.shape: orig_img = cv2.resize(orig_img, (p.shape[1], p.shape[0]))
-                        ret_mask = get_retina_mask(orig_img)
-                        c_mask_all = np.zeros_like(p)
-                        for c in range(1, config.NUM_LABELS):
-                            c_mask = ((p == c).astype(np.uint8) * ret_mask)
-                            if getattr(config, "MIN_REGION_SIZE", 0) > 0:
-                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                    if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+                        cleaned_preds = []
+                        for p in preds:
+                            new_p = np.zeros_like(p)
+                            for c in range(1, config.NUM_LABELS):
+                                c_mask = (p == c).astype(np.uint8)
+                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
                                 for lbl in range(1, num_labels):
                                     if stats[lbl, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
-                                        c_mask_all[labels_im == lbl] = c
-                            else:
-                                c_mask_all[c_mask > 0] = c
+                                        new_p[labels_im == lbl] = c
+                            cleaned_preds.append(new_p)
+                        preds = np.array(cleaned_preds)
                         
-                        cleaned_preds.append(c_mask_all)
-                        # Correct HD95 accumulation: per whole slice
+                    # Calculate HD95 per slice
+                    for b_idx in range(len(preds)):
+                        p, l_np = preds[b_idx], labels_np[b_idx]
                         for c in [1, 2, 3]:
-                            if np.any(c_mask_all == c) and np.any(l_np == c):
-                                class_hd95_vals[c].append(hd95(c_mask_all == c, l_np == c))
-                    
-                    preds = np.array(cleaned_preds)
+                            if np.any(p == c) and np.any(l_np == c):
+                                class_hd95_vals[c].append(hd95(p == c, l_np == c))
                     mask_cm = (labels_np >= 0) & (labels_np < config.NUM_LABELS)
                     total_cm += np.bincount(config.NUM_LABELS * labels_np[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
             
