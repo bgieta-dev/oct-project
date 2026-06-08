@@ -1,0 +1,121 @@
+2026-06-06 21:26:47,568 | INFO     | root:main:77 - Pipeline started. Results directory: C:\Users\Student\Documents\python\oct-project\experiments\run_2026-06-06_21-26-47
+2026-06-06 21:26:47,578 | INFO     | root:main:82 - Removed stale best_model.pth
+2026-06-06 21:26:47,582 | INFO     | root:main:85 - Device: NVIDIA GeForce RTX 3060
+2026-06-06 21:26:47,582 | INFO     | root:main:87 - GPU Memory: 12.00 GB
+2026-06-06 21:26:47,582 | INFO     | root:main:91 - --- PHASE 1: TRAINING ---
+2026-06-06 21:26:48,713 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-06-06 21:46:16,251 | INFO     | root:train_model:244 - Epoch 1 | Loss: 1.2133 | mIoU: 0.1343 | mHD95: 283.28
+2026-06-06 21:46:16,445 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.1343)
+2026-06-06 22:06:09,349 | INFO     | root:train_model:244 - Epoch 2 | Loss: 1.1439 | mIoU: 0.2609 | mHD95: 223.65
+2026-06-06 22:06:09,578 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.2609)
+2026-06-06 22:26:33,843 | INFO     | root:train_model:244 - Epoch 3 | Loss: 1.0092 | mIoU: 0.4063 | mHD95: 113.38
+2026-06-06 22:26:34,060 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.4063)
+2026-06-06 22:46:57,422 | INFO     | root:train_model:244 - Epoch 4 | Loss: 0.8845 | mIoU: 0.5268 | mHD95: 92.79
+2026-06-06 22:46:57,619 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.5268)
+2026-06-06 23:07:21,094 | INFO     | root:train_model:244 - Epoch 5 | Loss: 0.7425 | mIoU: 0.6037 | mHD95: 73.17
+2026-06-06 23:07:21,294 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6037)
+2026-06-06 23:27:46,744 | INFO     | root:train_model:244 - Epoch 6 | Loss: 0.6045 | mIoU: 0.6078 | mHD95: 76.18
+2026-06-06 23:27:46,951 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6078)
+2026-06-06 23:48:11,359 | INFO     | root:train_model:244 - Epoch 7 | Loss: 0.5310 | mIoU: 0.6458 | mHD95: 68.39
+2026-06-06 23:48:11,586 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6458)
+2026-06-07 00:09:31,440 | INFO     | root:train_model:244 - Epoch 8 | Loss: 0.4801 | mIoU: 0.6462 | mHD95: 64.26
+2026-06-07 00:09:31,653 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6462)
+2026-06-07 00:30:55,369 | INFO     | root:train_model:244 - Epoch 9 | Loss: 0.4653 | mIoU: 0.6622 | mHD95: 60.96
+2026-06-07 00:30:55,571 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6622)
+2026-06-07 00:51:08,440 | INFO     | root:train_model:244 - Epoch 10 | Loss: 0.4414 | mIoU: 0.6696 | mHD95: 61.07
+2026-06-07 00:51:08,646 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6696)
+2026-06-07 01:11:20,240 | INFO     | root:train_model:244 - Epoch 11 | Loss: 0.4227 | mIoU: 0.6660 | mHD95: 59.70
+2026-06-07 01:31:33,642 | INFO     | root:train_model:244 - Epoch 12 | Loss: 0.4098 | mIoU: 0.6843 | mHD95: 56.51
+2026-06-07 01:31:33,832 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6843)
+2026-06-07 01:51:51,570 | INFO     | root:train_model:244 - Epoch 13 | Loss: 0.4069 | mIoU: 0.6752 | mHD95: 57.14
+2026-06-07 02:12:06,099 | INFO     | root:train_model:244 - Epoch 14 | Loss: 0.4012 | mIoU: 0.6902 | mHD95: 57.81
+2026-06-07 02:12:06,390 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.6902)
+2026-06-07 02:32:21,764 | INFO     | root:train_model:244 - Epoch 15 | Loss: 0.3888 | mIoU: 0.7043 | mHD95: 50.53
+2026-06-07 02:32:21,952 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7043)
+2026-06-07 02:52:36,484 | INFO     | root:train_model:244 - Epoch 16 | Loss: 0.4034 | mIoU: 0.7171 | mHD95: 51.15
+2026-06-07 02:52:36,689 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7171)
+2026-06-07 03:12:50,640 | INFO     | root:train_model:244 - Epoch 17 | Loss: 0.3698 | mIoU: 0.7052 | mHD95: 50.44
+2026-06-07 03:33:05,715 | INFO     | root:train_model:244 - Epoch 18 | Loss: 0.3726 | mIoU: 0.7087 | mHD95: 55.16
+2026-06-07 03:53:22,920 | INFO     | root:train_model:244 - Epoch 19 | Loss: 0.3702 | mIoU: 0.7159 | mHD95: 53.96
+2026-06-07 04:13:39,215 | INFO     | root:train_model:244 - Epoch 20 | Loss: 0.3748 | mIoU: 0.7062 | mHD95: 56.28
+2026-06-07 04:33:55,007 | INFO     | root:train_model:244 - Epoch 21 | Loss: 0.3714 | mIoU: 0.7456 | mHD95: 41.31
+2026-06-07 04:33:55,196 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7456)
+2026-06-07 04:54:06,987 | INFO     | root:train_model:244 - Epoch 22 | Loss: 0.3619 | mIoU: 0.7351 | mHD95: 48.73
+2026-06-07 05:14:22,718 | INFO     | root:train_model:244 - Epoch 23 | Loss: 0.3551 | mIoU: 0.7162 | mHD95: 49.06
+2026-06-07 05:34:34,713 | INFO     | root:train_model:244 - Epoch 24 | Loss: 0.3503 | mIoU: 0.7083 | mHD95: 52.00
+2026-06-07 05:54:47,505 | INFO     | root:train_model:244 - Epoch 25 | Loss: 0.3498 | mIoU: 0.7289 | mHD95: 49.89
+2026-06-07 06:15:02,400 | INFO     | root:train_model:244 - Epoch 26 | Loss: 0.3450 | mIoU: 0.7269 | mHD95: 55.51
+2026-06-07 06:35:18,149 | INFO     | root:train_model:244 - Epoch 27 | Loss: 0.3487 | mIoU: 0.7271 | mHD95: 48.37
+2026-06-07 06:55:31,173 | INFO     | root:train_model:244 - Epoch 28 | Loss: 0.3364 | mIoU: 0.7299 | mHD95: 47.31
+2026-06-07 07:15:43,758 | INFO     | root:train_model:244 - Epoch 29 | Loss: 0.3432 | mIoU: 0.7384 | mHD95: 45.71
+2026-06-07 07:35:58,810 | INFO     | root:train_model:244 - Epoch 30 | Loss: 0.3367 | mIoU: 0.7457 | mHD95: 42.18
+2026-06-07 07:35:59,010 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7457)
+2026-06-07 07:56:12,399 | INFO     | root:train_model:244 - Epoch 31 | Loss: 0.3379 | mIoU: 0.7245 | mHD95: 48.53
+2026-06-07 08:17:44,837 | INFO     | root:train_model:244 - Epoch 32 | Loss: 0.3455 | mIoU: 0.7450 | mHD95: 44.18
+2026-06-07 08:38:33,148 | INFO     | root:train_model:244 - Epoch 33 | Loss: 0.3278 | mIoU: 0.7534 | mHD95: 43.76
+2026-06-07 08:38:33,341 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7534)
+2026-06-07 08:58:48,807 | INFO     | root:train_model:244 - Epoch 34 | Loss: 0.3342 | mIoU: 0.7311 | mHD95: 47.94
+2026-06-07 09:19:06,811 | INFO     | root:train_model:244 - Epoch 35 | Loss: 0.3448 | mIoU: 0.7494 | mHD95: 46.26
+2026-06-07 09:39:21,966 | INFO     | root:train_model:244 - Epoch 36 | Loss: 0.3301 | mIoU: 0.7321 | mHD95: 45.94
+2026-06-07 09:59:35,917 | INFO     | root:train_model:244 - Epoch 37 | Loss: 0.3246 | mIoU: 0.7462 | mHD95: 44.65
+2026-06-07 10:19:53,470 | INFO     | root:train_model:244 - Epoch 38 | Loss: 0.3354 | mIoU: 0.7247 | mHD95: 50.03
+2026-06-07 10:40:07,156 | INFO     | root:train_model:244 - Epoch 39 | Loss: 0.3327 | mIoU: 0.7316 | mHD95: 49.20
+2026-06-07 11:00:23,544 | INFO     | root:train_model:244 - Epoch 40 | Loss: 0.3323 | mIoU: 0.7295 | mHD95: 52.89
+2026-06-07 11:20:36,316 | INFO     | root:train_model:244 - Epoch 41 | Loss: 0.3314 | mIoU: 0.7444 | mHD95: 45.87
+2026-06-07 11:40:50,675 | INFO     | root:train_model:244 - Epoch 42 | Loss: 0.3298 | mIoU: 0.7491 | mHD95: 44.29
+2026-06-07 12:01:07,203 | INFO     | root:train_model:244 - Epoch 43 | Loss: 0.3293 | mIoU: 0.7500 | mHD95: 43.84
+2026-06-07 12:21:21,090 | INFO     | root:train_model:244 - Epoch 44 | Loss: 0.3285 | mIoU: 0.7389 | mHD95: 48.62
+2026-06-07 12:42:49,197 | INFO     | root:train_model:244 - Epoch 45 | Loss: 0.3250 | mIoU: 0.7381 | mHD95: 48.44
+2026-06-07 13:03:34,662 | INFO     | root:train_model:244 - Epoch 46 | Loss: 0.3172 | mIoU: 0.7522 | mHD95: 43.62
+2026-06-07 13:23:51,443 | INFO     | root:train_model:244 - Epoch 47 | Loss: 0.3141 | mIoU: 0.7460 | mHD95: 45.11
+2026-06-07 13:44:04,894 | INFO     | root:train_model:244 - Epoch 48 | Loss: 0.3206 | mIoU: 0.7348 | mHD95: 46.55
+2026-06-07 14:04:21,609 | INFO     | root:train_model:244 - Epoch 49 | Loss: 0.3230 | mIoU: 0.7444 | mHD95: 44.88
+2026-06-07 14:24:36,856 | INFO     | root:train_model:244 - Epoch 50 | Loss: 0.3182 | mIoU: 0.7516 | mHD95: 43.54
+2026-06-07 14:44:49,728 | INFO     | root:train_model:244 - Epoch 51 | Loss: 0.3145 | mIoU: 0.7520 | mHD95: 42.34
+2026-06-07 15:05:04,067 | INFO     | root:train_model:244 - Epoch 52 | Loss: 0.3191 | mIoU: 0.7545 | mHD95: 44.88
+2026-06-07 15:05:04,272 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7545)
+2026-06-07 15:25:18,830 | INFO     | root:train_model:244 - Epoch 53 | Loss: 0.3136 | mIoU: 0.7530 | mHD95: 43.80
+2026-06-07 15:45:32,198 | INFO     | root:train_model:244 - Epoch 54 | Loss: 0.3079 | mIoU: 0.7530 | mHD95: 44.99
+2026-06-07 16:06:57,367 | INFO     | root:train_model:244 - Epoch 55 | Loss: 0.3147 | mIoU: 0.7619 | mHD95: 41.09
+2026-06-07 16:06:57,560 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7619)
+2026-06-07 16:27:50,717 | INFO     | root:train_model:244 - Epoch 56 | Loss: 0.3050 | mIoU: 0.7512 | mHD95: 46.41
+2026-06-07 16:48:03,763 | INFO     | root:train_model:244 - Epoch 57 | Loss: 0.3127 | mIoU: 0.7611 | mHD95: 42.90
+2026-06-07 17:08:17,635 | INFO     | root:train_model:244 - Epoch 58 | Loss: 0.3066 | mIoU: 0.7678 | mHD95: 41.30
+2026-06-07 17:08:17,840 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7678)
+2026-06-07 17:28:31,787 | INFO     | root:train_model:244 - Epoch 59 | Loss: 0.3000 | mIoU: 0.7598 | mHD95: 43.67
+2026-06-07 17:48:48,489 | INFO     | root:train_model:244 - Epoch 60 | Loss: 0.3143 | mIoU: 0.7596 | mHD95: 42.25
+2026-06-07 18:09:05,097 | INFO     | root:train_model:244 - Epoch 61 | Loss: 0.3088 | mIoU: 0.7561 | mHD95: 44.01
+2026-06-07 18:29:30,711 | INFO     | root:train_model:244 - Epoch 62 | Loss: 0.3054 | mIoU: 0.7585 | mHD95: 44.51
+2026-06-07 18:49:43,956 | INFO     | root:train_model:244 - Epoch 63 | Loss: 0.3101 | mIoU: 0.7668 | mHD95: 42.15
+2026-06-07 19:09:58,219 | INFO     | root:train_model:244 - Epoch 64 | Loss: 0.3193 | mIoU: 0.7648 | mHD95: 41.69
+2026-06-07 19:30:11,497 | INFO     | root:train_model:244 - Epoch 65 | Loss: 0.3084 | mIoU: 0.7577 | mHD95: 43.72
+2026-06-07 19:50:24,147 | INFO     | root:train_model:244 - Epoch 66 | Loss: 0.3080 | mIoU: 0.7669 | mHD95: 42.09
+2026-06-07 20:10:37,172 | INFO     | root:train_model:244 - Epoch 67 | Loss: 0.3117 | mIoU: 0.7624 | mHD95: 42.31
+2026-06-07 20:30:48,776 | INFO     | root:train_model:244 - Epoch 68 | Loss: 0.3107 | mIoU: 0.7658 | mHD95: 42.09
+2026-06-07 20:51:04,546 | INFO     | root:train_model:244 - Epoch 69 | Loss: 0.3020 | mIoU: 0.7615 | mHD95: 43.92
+2026-06-07 21:11:26,399 | INFO     | root:train_model:244 - Epoch 70 | Loss: 0.3132 | mIoU: 0.7636 | mHD95: 42.37
+2026-06-07 21:31:41,195 | INFO     | root:train_model:244 - Epoch 71 | Loss: 0.3097 | mIoU: 0.7632 | mHD95: 42.38
+2026-06-07 21:51:57,153 | INFO     | root:train_model:244 - Epoch 72 | Loss: 0.3022 | mIoU: 0.7673 | mHD95: 41.94
+2026-06-07 22:12:14,042 | INFO     | root:train_model:244 - Epoch 73 | Loss: 0.2989 | mIoU: 0.7658 | mHD95: 40.96
+2026-06-07 22:32:29,429 | INFO     | root:train_model:244 - Epoch 74 | Loss: 0.3065 | mIoU: 0.7632 | mHD95: 42.15
+2026-06-07 22:52:45,661 | INFO     | root:train_model:244 - Epoch 75 | Loss: 0.3056 | mIoU: 0.7638 | mHD95: 41.66
+2026-06-07 23:12:59,882 | INFO     | root:train_model:244 - Epoch 76 | Loss: 0.3033 | mIoU: 0.7615 | mHD95: 42.37
+2026-06-07 23:33:13,268 | INFO     | root:train_model:244 - Epoch 77 | Loss: 0.2991 | mIoU: 0.7667 | mHD95: 41.86
+2026-06-07 23:53:31,322 | INFO     | root:train_model:244 - Epoch 78 | Loss: 0.2929 | mIoU: 0.7670 | mHD95: 41.51
+2026-06-08 00:13:45,911 | INFO     | root:train_model:244 - Epoch 79 | Loss: 0.3041 | mIoU: 0.7656 | mHD95: 41.66
+2026-06-08 00:34:00,527 | INFO     | root:train_model:244 - Epoch 80 | Loss: 0.3091 | mIoU: 0.7685 | mHD95: 41.96
+2026-06-08 00:34:00,726 | INFO     | root:train_model:248 - New best model saved! (mIoU: 0.7685)
+2026-06-08 00:34:01,258 | INFO     | root:main:107 - --- PHASE 2: EVALUATION ---
+2026-06-08 00:34:03,453 | ERROR    | root:main:132 - ERROR during evaluation:
+2026-06-08 00:34:03,468 | ERROR    | root:main:133 - Traceback (most recent call last):
+  File "C:\Users\Student\Documents\python\oct-project\main.py", line 110, in main
+    metrics = evaluate_model(model_path=best_model_name, output_dir=exp_dir)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Student\Documents\python\oct-project\eval.py", line 74, in evaluate_model
+    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
+                    ^
+UnboundLocalError: cannot access local variable 'A' where it is not associated with a value
+
+2026-06-08 00:34:03,468 | INFO     | root:main:137 - --- PHASE 3: ATTENTION VISUALIZATION ---
+2026-06-08 00:34:15,657 | INFO     | root:main:146 - --- PHASE 4: ARCHIVING ---
+2026-06-08 00:34:15,916 | INFO     | root:main:152 - Pipeline finished successfully. Artifacts saved in C:\Users\Student\Documents\python\oct-project\experiments\run_2026-06-06_21-26-47

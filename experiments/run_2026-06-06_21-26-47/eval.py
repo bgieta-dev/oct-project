@@ -1,0 +1,211 @@
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
+from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
+from dataset import OCTDataset
+from tqdm import tqdm
+import config
+from medpy.metric.binary import hd95, asd
+from utils import get_stratified_splits
+import logging
+from scipy import ndimage
+import cv2
+
+# --- CLINICAL METRIC ANALYZERS ---
+
+class BoundaryPrecisionAnalyzer:
+    def __init__(self, kernel_size=3):
+        self.kernel = np.ones((kernel_size, kernel_size), np.uint8)
+
+    def get_boundary_contrast(self, image, mask):
+        if not np.any(mask): return 0.0
+        dilated = cv2.dilate(mask.astype(np.uint8), self.kernel, iterations=1)
+        eroded = cv2.erode(mask.astype(np.uint8), self.kernel, iterations=1)
+        outer_edge = dilated - mask.astype(np.uint8)
+        inner_edge = mask.astype(np.uint8) - eroded
+        outer_vals = image[outer_edge > 0]
+        inner_vals = image[inner_edge > 0]
+        if len(outer_vals) == 0 or len(inner_vals) == 0: return 0.0
+        return np.abs(np.mean(inner_vals) - np.mean(outer_vals))
+
+def get_retina_mask(img):
+    img_f = img.astype(np.float32)
+    if img_f.max() > 1.0: img_f /= 255.0
+    blurred = cv2.GaussianBlur(img_f, (31, 31), 0)
+    row_means = np.mean(blurred, axis=1)
+    mask_rows = row_means > 0.03
+    retina_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
+    if np.any(mask_rows):
+        rows = np.where(mask_rows)[0]
+        retina_mask[max(0, rows[0]-30):min(img.shape[0], rows[-1]+50), :] = 1
+    else:
+        retina_mask.fill(1)
+    return retina_mask
+
+# --- MODEL EVALUATION PIPELINE ---
+
+def evaluate_model(model_path="best_model.pth", output_dir="."):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 1. Load Data
+    all_files = sorted(os.listdir(config.IMG_DIR))
+    if os.path.exists("test_patients.txt"):
+        with open("test_patients.txt", "r") as f: test_patients = f.read().splitlines()
+    else:
+        _, _, test_patients = get_stratified_splits(all_files)
+    
+    test_imgs = [os.path.join(config.IMG_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
+    test_masks = [os.path.join(config.MASK_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
+
+    # 2. Model Init
+    processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
+    model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True, output_attentions=True)
+    
+    if os.path.exists(model_path):
+        state_dict = torch.load(model_path, map_location=config.DEVICE, weights_only=True)
+        model.load_state_dict(state_dict, strict=False)
+    
+    model.to(config.DEVICE).eval()
+    total_params = sum(p.numel() for p in model.parameters()) / 1e6
+
+    # 3. Setup Dataset
+    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
+    import albumentations as A
+    dataset = OCTDataset(test_imgs, test_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
+    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
+
+    # 4. State
+    total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
+    class_hd95_vals = {1: [], 2: [], 3: []}
+    class_asd_vals = {1: [], 2: [], 3: []}
+    class_region_counts_gt = {1: [], 2: [], 3: []}
+    class_region_counts_pred = {1: [], 2: [], 3: []}
+    class_boundary_diffs = {1: [], 2: [], 3: []}
+    class_pixel_areas_gt = {1: [], 2: [], 3: []}
+    image_metrics = []
+    
+    # Vis Selection
+    vis_indices = {}
+    class_max_counts = {1: 0, 2: 0, 3: 0}
+    for idx in range(min(50, len(dataset))): # Limit scan for speed
+        m = dataset.get_raw_mask(idx)
+        for c in [1, 2, 3]:
+            cnt = np.sum(m == c)
+            if cnt > class_max_counts[c]:
+                class_max_counts[c] = cnt; vis_indices[c] = idx
+
+    # 5. Evaluation Loop
+    logging.info("Evaluating...")
+    global_idx = 0
+    for batch in tqdm(loader):
+        pixel_values = batch["pixel_values"].to(config.DEVICE)
+        labels_batch = batch["labels"].numpy()
+        orig_img_batch = batch["orig_img"].numpy()
+        
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+            logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear")
+            attentions = outputs.attentions[-1]
+            
+            # Att map logic
+            avg_att = torch.mean(attentions, dim=1)
+            spatial_att = torch.mean(avg_att, dim=1)
+            grid_size = int(np.sqrt(spatial_att.shape[1]))
+            att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
+            
+            probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
+            preds_batch = np.argmax(probs_batch, axis=1).astype(np.uint8)
+            
+            cleaned_preds = []
+            for b_idx in range(len(preds_batch)):
+                p = preds_batch[b_idx]
+                ret_mask = get_retina_mask(orig_img_batch[b_idx])
+                new_p = np.zeros_like(p)
+                for c in range(1, config.NUM_LABELS):
+                    c_mask = ((p == c).astype(np.uint8) * ret_mask)
+                    num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                    for label in range(1, num_labels):
+                        if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
+                            new_p[labels_im == label] = c
+                cleaned_preds.append(new_p)
+            preds_batch = np.array(cleaned_preds)
+
+        for b_idx in range(len(preds_batch)):
+            labels, pred, att_map = labels_batch[b_idx], preds_batch[b_idx], att_maps[b_idx]
+            orig_img = orig_img_batch[b_idx]
+            central_img = orig_img[:, :, 1] if config.USE_25D else orig_img[:, :, 0]
+            
+            mask = (labels >= 0) & (labels < config.NUM_LABELS)
+            total_cm += np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
+            
+            # Simple fluid iou for vis tracking
+            img_tp = np.diag(np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS))
+            img_fp = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS).sum(axis=0) - img_tp
+            img_fn = np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS).sum(axis=1) - img_tp
+            img_iou = np.mean(img_tp[1:] / (img_tp[1:] + img_fp[1:] + img_fn[1:] + 1e-6))
+            image_metrics.append((img_iou, global_idx, orig_img, labels, pred, att_map))
+
+            for c in [1, 2, 3]:
+                gt_c, pred_c = (labels == c), (pred == c)
+                if np.any(gt_c):
+                    _, gt_num = ndimage.label(gt_c)
+                    class_region_counts_gt[c].append(gt_num)
+                    class_boundary_diffs[c].append(BoundaryPrecisionAnalyzer().get_boundary_contrast(central_img, gt_c))
+                    class_pixel_areas_gt[c].append(np.sum(gt_c))
+                if np.any(pred_c):
+                    _, pred_num = ndimage.label(pred_c)
+                    class_region_counts_pred[c].append(pred_num)
+                if np.any(gt_c) and np.any(pred_c):
+                    class_hd95_vals[c].append(hd95(pred_c, gt_c))
+                    class_asd_vals[c].append(asd(pred_c, gt_c))
+            global_idx += 1
+
+    # Visualization
+    plt.figure(figsize=(16, 12))
+    for c_id, target_idx in vis_indices.items():
+        match = [m for m in image_metrics if m[1] == target_idx][0]
+        _, _, img, gt, prd, att = match
+        pos = c_id - 1
+        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
+        plt.subplot(3, 4, pos*4+1); plt.imshow(vis_img); plt.axis("off")
+        plt.subplot(3, 4, pos*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off")
+        plt.subplot(3, 4, pos*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off")
+        att_norm = (cv2.resize(att, (512,512)) - att.min()) / (att.max() - att.min() + 1e-8)
+        plt.subplot(3, 4, pos*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off")
+    plt.savefig(os.path.join(output_dir, "predictions.png")); plt.close()
+
+    # Failures
+    fail_dir = os.path.join(output_dir, "failures"); os.makedirs(fail_dir, exist_ok=True)
+    image_metrics.sort(key=lambda x: x[0])
+    for i, (iou_val, g_idx, img, gt, prd, _) in enumerate(image_metrics[:5]):
+        plt.figure(figsize=(12, 4))
+        vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
+        plt.subplot(1,3,1); plt.imshow(vis_img); plt.axis("off")
+        plt.subplot(1,3,2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off")
+        plt.subplot(1,3,3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.title(f"IoU: {iou_val:.2f}"); plt.axis("off")
+        plt.savefig(os.path.join(fail_dir, f"failure_{i+1}.png")); plt.close()
+
+    # Results
+    tp = np.diag(total_cm)
+    fp, fn = total_cm.sum(axis=0) - tp, total_cm.sum(axis=1) - tp
+    ious, dices = tp/(tp+fp+fn+1e-6), (2*tp)/(2*tp+fp+fn+1e-6)
+    
+    def safe_mean(lst): return np.mean(lst) if lst else 0.0
+
+    return {
+        'params': total_params, 'mIoU': np.mean(ious), 'mDice': np.mean(dices),
+        'class_ious': {c: ious[c] for c in range(4)}, 'class_dices': {c: dices[c] for c in range(4)},
+        'class_hd95': {c: safe_mean(class_hd95_vals[c]) for c in [1, 2, 3]},
+        'class_asd': {c: safe_mean(class_asd_vals[c]) for c in [1, 2, 3]},
+        'class_avg_regions_gt': {c: safe_mean(class_region_counts_gt[c]) for c in [1, 2, 3]},
+        'class_avg_regions_pred': {c: safe_mean(class_region_counts_pred[c]) for c in [1, 2, 3]},
+        'class_boundary_precision': {c: safe_mean(class_boundary_diffs[c]) for c in [1, 2, 3]},
+        'class_avg_pixel_area': {c: safe_mean(class_pixel_areas_gt[c]) for c in [1, 2, 3]},
+        'mHD95': safe_mean([safe_mean(class_hd95_vals[c]) for c in [1, 2, 3] if class_hd95_vals[c]]),
+        'mASD': safe_mean([safe_mean(class_asd_vals[c]) for c in [1, 2, 3] if class_asd_vals[c]])
+    }
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO); print(evaluate_model())
