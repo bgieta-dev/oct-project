@@ -162,40 +162,63 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                     class_asd_vals[c].append(asd(pred_c, gt_c))
             global_idx += 1
 
-    # 6. Visualization - Pick BEST examples from the FULL test set
-    logging.info("Generating visualizations...")
+    # 6. Visualization - Pick BEST examples based on MAXIMUM AREA (Matching test15 behavior)
+    logging.info("Selecting representative slices for predictions.png (Max Area logic)...")
     vis_indices = {}
     for c in [1, 2, 3]:
-        # Find index with MOST pixels for class c to show clear pathology
+        # Find index with ABSOLUTE MAXIMUM pixels for class c across entire dataset
         best_pos = -1
         max_px = 0
         for i, m in enumerate(image_metrics):
-            px_count = np.sum(m[3] == c)
+            px_count = np.sum(m[3] == c) # m[3] is the Ground Truth mask
             if px_count > max_px:
                 max_px = px_count
                 best_pos = i
+        
         if best_pos != -1:
             vis_indices[c] = best_pos
 
     if not vis_indices:
-        logging.warning("No pathology found in test set! Picking first 3 images for predictions.png")
+        logging.warning("No pathology found in test set! Picking first slices.")
         for i in range(min(3, len(image_metrics))): vis_indices[i+1] = i
 
-    plt.figure(figsize=(16, 12))
+    plt.figure(figsize=(20, 15))
     for i, (c_id, list_pos) in enumerate(vis_indices.items()):
-        iou, _, img, gt, prd, att = image_metrics[list_pos]
+        iou_val, _, img, gt, prd, att = image_metrics[list_pos]
         vis_img = img[:, :, 1] if config.USE_25D else img[:, :, 0]
         
-        plt.subplot(3, 4, i*4+1); plt.imshow(vis_img, cmap="gray"); plt.axis("off"); plt.title(f"OCT: {config.CLASS_NAMES[c_id]}")
-        plt.subplot(3, 4, i*4+2); plt.imshow(gt, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title("Ground Truth")
-        plt.subplot(3, 4, i*4+3); plt.imshow(prd, cmap="jet", vmin=0, vmax=3); plt.axis("off"); plt.title(f"Pred (IoU: {iou:.2f})")
+        # Display OCT
+        ax1 = plt.subplot(3, 4, i*4+1)
+        ax1.imshow(vis_img, cmap="gray")
+        ax1.set_title(f"Class: {config.CLASS_NAMES[c_id]}", fontsize=14, fontweight='bold')
+        ax1.axis("off")
         
-        # Overlay Attention
-        att_norm = (cv2.resize(att, (vis_img.shape[1], vis_img.shape[0])) - att.min()) / (att.max() - att.min() + 1e-8)
-        plt.subplot(3, 4, i*4+4); plt.imshow(vis_img, cmap="gray"); plt.imshow(att_norm, cmap="jet", alpha=0.5); plt.axis("off"); plt.title("Attention Map")
+        # Display Ground Truth
+        ax2 = plt.subplot(3, 4, i*4+2)
+        ax2.imshow(gt, cmap="jet", vmin=0, vmax=3)
+        ax2.set_title("Manual Annotation (GT)", fontsize=12)
+        ax2.axis("off")
+        
+        # Display Prediction
+        ax3 = plt.subplot(3, 4, i*4+3)
+        ax3.imshow(prd, cmap="jet", vmin=0, vmax=3)
+        ax3.set_title(f"Model Prediction (IoU: {iou_val:.2f})", fontsize=12)
+        ax3.axis("off")
+        
+        # Display Attention Overlay (Enhanced Contrast)
+        ax4 = plt.subplot(3, 4, i*4+4)
+        # Power-transform attention for better visibility of "hot" spots
+        att_resized = cv2.resize(att, (vis_img.shape[1], vis_img.shape[0]))
+        att_norm = (att_resized - att_resized.min()) / (att_resized.max() - att_resized.min() + 1e-8)
+        att_norm = np.power(att_norm, 0.7) # Enhance mid-tones
+        
+        ax4.imshow(vis_img, cmap="gray")
+        ax4.imshow(att_norm, cmap="jet", alpha=0.45)
+        ax4.set_title("Self-Attention Heatmap", fontsize=12)
+        ax4.axis("off")
     
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=150)
+    plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=200, bbox_inches='tight')
     plt.close()
 
     # 7. Failure Analysis (Top 5 worst)
