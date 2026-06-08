@@ -21,9 +21,24 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
 
 ## Experimental History
 
-### 2026-06-03 (test17 - THE FINAL SCALE-UP - ACTIVE)
+### 2026-06-08 (test18 - Transformer Overdrive / Clinical High-Recall)
+**Model:** SegFormer (**MiT-B2**)
+**Status:** **Active Clinical Benchmark (Thesis Target).**
+**Strategy (Matching CNN baselines & Clinical Reality):**
+- **Architecture Downgrade:** Returned to MiT-B2 (from B3) due to severe noise overfitting on the small RETOUCH cohort.
+- **Clinical High-Recall (Loss & Thresholds):** 
+    - In medicine, False Negatives (missing a cyst) are more dangerous than False Positives.
+    - **Tversky Tuning:** Shifted balance to strongly penalize False Negatives (`Alpha=0.1`, `Beta=0.9`).
+    - **Thresholding:** Replaced strict `argmax` with probability thresholds (IRF triggers at just `0.30` confidence).
+- **Morphological Tuning (Addressing Bilinear Blurring):**
+    - **IRF Separation:** Added Morphological Opening specifically for IRF to break thin probability bridges, preventing distinct cysts from merging.
+    - **PED Sharpening:** SegFormer's 4x upsampling smooths boundaries. Added a 2D Sharpening Filter (Unsharp Mask) to the PED probability map to restore the clinically correct "spiky" RPE lifts.
+- **Advanced TTA:** Reintroduced full Test-Time Augmentation (Scales: 0.8, 1.0, 1.2 + Flips) to smooth boundary artifacts and boost DSC.
+- **Visual Clarity:** Upgraded attention visualization to Stage 2 (64x64 grid) with Gamma correction for dramatically sharper heatmaps.
+
+### 2026-06-08 (test17 - THE FINAL SCALE-UP - COMPLETED/FAILED)
 **Model:** SegFormer (**MiT-B3**)
-**Status:** **Active Final Benchmark.**
+**Status:** **Completed (Architecture Dropped).**
 **Strategy (Scaling for Precision):**
 - **Architecture:** Scaling to MiT-B3 (~44M parameters) to capture high-frequency clinical details.
 - **Regularization:** Increased **Dropout to 0.3** to prevent overfitting on the small RETOUCH cohort.
@@ -32,6 +47,7 @@ Task: Semantic segmentation of fluid spaces in DME (Diabetic Macular Edema).
     - Reduced **MIN_REGION to 5px** to allow B3's sharper features to persist.
     - This allows the model's raw high-resolution output to drive the final metrics without artificial distortion.
 - **Consistency:** Maintaining the successful Test 16 pipeline (Fixed weights `[0.5, 5.0, 2.0, 2.0]`, Argmax, Focal-Tversky).
+**Analysis:** Scaling to MiT-B3 caused severe overfitting on the small 56-patient training set, even with high dropout. The model memorized noise, leading to suppressed metrics in validation compared to MiT-B2. Strategy abandoned in favor of Test 18 (MiT-B2 + advanced TTA).
 
 ### 2026-06-03 (test16 - THE FINAL STABILITY RUN - COMPLETED)
 **Model:** SegFormer (**MiT-B2**)
