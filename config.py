@@ -12,7 +12,7 @@ MASK_DIR = os.path.join(DATA_DIR, "cropped_masks")
 # --- SEGFORMER ARCHITECTURE CONFIGURATION ---
 # Model: MiT-B3 (Mix Vision Transformer). 
 # Test 17: Scaling up to B3 (~44M parameters) using the stabilized Test 16 pipeline.
-MODEL_NAME = "nvidia/mit-b3" 
+MODEL_NAME = "nvidia/mit-b2" 
 NUM_LABELS = 4
 USE_MULTIMODAL = True
 # 2.5D Logic: Utilizing 3 adjacent B-scans as input channels (t-1, t, t+1).

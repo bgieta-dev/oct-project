@@ -1,0 +1,30 @@
+2026-06-08 09:27:38,603 [INFO] Starting Standalone Evaluation. Results will be in: C:\Users\Student\Documents\python\oct-project\eval_results_2026-06-08_09-27-38
+2026-06-08 09:27:38,618 [INFO] Replicating Test 15 slice selection (scanning raw masks)...
+2026-06-08 09:27:39,135 [INFO] Fixed vis indices to match Test 15: {1: 331, 2: 283, 3: 556}
+2026-06-08 09:27:39,747 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+2026-06-08 09:27:39,749 [WARNING] Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-06-08 09:27:39,888 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/preprocessor_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-08 09:27:39,921 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/nvidia/mit-b2/3bb39e8739149c3777d0325349b2a6c32c6413db/preprocessor_config.json "HTTP/1.1 200 OK"
+2026-06-08 09:27:40,047 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-08 09:27:40,073 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/nvidia/mit-b2/3bb39e8739149c3777d0325349b2a6c32c6413db/config.json "HTTP/1.1 200 OK"
+2026-06-08 09:27:40,227 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/model.safetensors "HTTP/1.1 404 Not Found"
+2026-06-08 09:27:40,353 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/model.safetensors.index.json "HTTP/1.1 404 Not Found"
+2026-06-08 09:27:40,794 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/pytorch_model.bin "HTTP/1.1 302 Found"
+2026-06-08 09:27:40,923 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/main/model.safetensors "HTTP/1.1 404 Not Found"
+2026-06-08 09:27:41,051 [INFO] HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2 "HTTP/1.1 200 OK"
+2026-06-08 09:27:41,212 [INFO] HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/commits/main "HTTP/1.1 200 OK"
+2026-06-08 09:27:41,267 [INFO] Loading weights from best_model.pth
+2026-06-08 09:27:41,385 [INFO] HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/discussions?p=0 "HTTP/1.1 200 OK"
+2026-06-08 09:27:41,552 [INFO] HTTP Request: GET https://huggingface.co/api/models/nvidia/mit-b2/commits/refs%2Fpr%2F2 "HTTP/1.1 200 OK"
+2026-06-08 09:27:41,669 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/refs%2Fpr%2F2/model.safetensors.index.json "HTTP/1.1 404 Not Found"
+2026-06-08 09:27:41,719 [INFO] Evaluating on 674 slices...
+2026-06-08 09:27:41,811 [INFO] HTTP Request: HEAD https://huggingface.co/nvidia/mit-b2/resolve/refs%2Fpr%2F2/model.safetensors "HTTP/1.1 302 Found"
+2026-06-08 09:28:42,615 [INFO] Generating predictions.png (Exact Test 15 indices)...
+2026-06-08 09:28:45,651 [INFO] --- EVALUATION RESULTS ---
+2026-06-08 09:28:45,652 [INFO] Final mIoU: 0.7122 | Final mDice: 0.8232
+2026-06-08 09:28:45,652 [INFO] Final mHD95: 75.1854 | Final mASD: 24.3319
+2026-06-08 09:28:45,652 [INFO] --- CLASS-SPECIFIC FINDINGS ---
+2026-06-08 09:28:45,653 [INFO] Class 1 (IRF) | IoU: 0.5828 | Dice: 0.7364 | HD95: 49.64
+2026-06-08 09:28:45,653 [INFO] Class 2 (SRF) | IoU: 0.6602 | Dice: 0.7954 | HD95: 95.63
+2026-06-08 09:28:45,653 [INFO] Class 3 (PED) | IoU: 0.6307 | Dice: 0.7735 | HD95: 80.29
+2026-06-08 09:28:45,653 [INFO] Evaluation complete. Artifacts saved in: C:\Users\Student\Documents\python\oct-project\eval_results_2026-06-08_09-27-38
