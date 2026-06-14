@@ -116,6 +116,12 @@ class OCTDataset(Dataset):
 
         mask = np.array(Image.open(self.mask_paths[idx]))
         
+        # --- BINARY EXPERT MODE ---
+        if self.target_class is not None:
+            binary_mask = np.zeros_like(mask)
+            binary_mask[mask == self.target_class] = 1
+            mask = binary_mask
+
         # --- AUGMENTATION ---
         if self.transform:
             augmented = self.transform(image=image, mask=mask)
