@@ -1,7 +1,0 @@
-2026-06-18 17:05:54,298 | INFO     | root:main:104 - Pipeline started. Results directory: /home/bgieta/Documents/code/oct-project/experiments/run_2026-06-18_17-05-54
-2026-06-18 17:05:54,298 | INFO     | root:main:113 - Device: AMD Radeon RX 9070 XT
-2026-06-18 17:05:54,298 | INFO     | root:main:115 - GPU Max Memory Capacity: 15.92 GB
-2026-06-18 17:05:54,298 | INFO     | root:check_vram_diagnostics:68 - VRAM Status Diagnostic: 15.84 GB Free / 15.92 GB Total
-2026-06-18 17:05:54,298 | INFO     | root:main:119 - --- PHASE 1: TRAINING ---
-2026-06-18 17:05:54,320 | INFO     | root:calculate_dynamic_weights:104 - Calculating dynamic class weights...
-2026-06-18 17:05:58,340 | WARNING  | huggingface_hub.utils._http:_warn_on_warning_headers:904 - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
