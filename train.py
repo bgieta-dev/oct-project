@@ -4,8 +4,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 import albumentations as A
-import time
-from datetime import timedelta
 from tqdm import tqdm
 from dataset import OCTDataset
 import logging
@@ -15,7 +13,6 @@ import matplotlib.pyplot as plt
 import config
 from utils import get_stratified_splits
 import torch.nn.functional as F
-from eval import get_retina_mask
 from scipy.ndimage import distance_transform_edt
 from medpy.metric.binary import hd95
 import cv2
@@ -57,35 +54,51 @@ class FocalLoss(torch.nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, targets, mask=None):
-        ce_loss = torch.nn.functional.cross_entropy(inputs, targets, weight=self.alpha, reduction='none')
+        ce_loss = torch.nn.functional.cross_entropy(inputs, targets, weight=None, reduction='none')
         pt = torch.exp(-ce_loss)
         focal_loss = (1 - pt)**self.gamma * ce_loss
+        
+        if self.alpha is not None:
+            at = self.alpha[targets]
+            focal_loss = focal_loss * at
+
         if mask is not None:
             focal_loss = focal_loss * mask
-            if self.reduction == 'mean': return focal_loss.sum() / (mask.sum() + 1e-8)
-        if self.reduction == 'mean': return focal_loss.mean()
-        else: return focal_loss.sum()
+            if self.reduction == 'mean': 
+                return focal_loss.sum() / (mask.sum() + 1e-8)
+        if self.reduction == 'mean': 
+            return focal_loss.mean()
+        else: 
+            return focal_loss.sum()
 
 class TverskyLoss(torch.nn.Module):
-    def __init__(self, alpha, beta, num_classes):
+    def __init__(self, alpha, beta, num_classes, include_background=False):
         super(TverskyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta
         self.num_classes = num_classes
+        self.include_background = include_background
 
     def forward(self, pred, target, mask=None):
         pred = torch.softmax(pred, dim=1)
-        target_one_hot = torch.nn.functional.one_hot(target, self.num_classes).permute(0, 3, 1, 2).float()
+        target_long = target.long()
+        target_one_hot = torch.nn.functional.one_hot(target_long, self.num_classes).permute(0, 3, 1, 2).float()
+        
         if mask is not None:
             mask = mask.unsqueeze(1)
             pred = pred * mask
             target_one_hot = target_one_hot * mask
+            
         dims = (0, 2, 3)
         tp = torch.sum(pred * target_one_hot, dims)
         fp = torch.sum(pred * (1 - target_one_hot), dims)
         fn = torch.sum((1 - pred) * target_one_hot, dims)
+        
         tversky = (tp + 1e-6) / (tp + self.alpha * fp + self.beta * fn + 1e-6)
-        return 1 - tversky[1:].mean()
+        
+        if not self.include_background:
+            return 1 - tversky[1:].mean()
+        return 1 - tversky.mean()
 
 def calculate_dynamic_weights(mask_paths, num_classes):
     logging.info("Calculating dynamic class weights...")
@@ -93,36 +106,47 @@ def calculate_dynamic_weights(mask_paths, num_classes):
     from PIL import Image
     for p in tqdm(mask_paths, desc="Scanning masks"):
         m = np.array(Image.open(p))
-        counts += np.bincount(m.flatten(), minlength=num_classes)
-    weights = 1.0 / (counts + 1e-6)
+        counts += np.bincount(m.ravel(), minlength=num_classes)
+    
+    weights = 1.0 / (counts + 1.0) 
     weights = weights / weights.sum() * num_classes
-    weights[0] = min(weights[0], 0.2)
+    
+    if weights[0] > 0.2:
+        weights[0] = 0.2
+        remaining_sum = num_classes - 0.2
+        other_weights_sum = weights[1:].sum()
+        if other_weights_sum > 0:
+            weights[1:] = (weights[1:] / other_weights_sum) * remaining_sum
+            
     return weights
 
 # --- MAIN TRAINING PIPELINE ---
 
+def distribute_files(all_files, train_p, val_p, cfg):
+    train_imgs, train_masks = [], []
+    val_imgs, val_masks = [], []
+    for f in all_files:
+        p = "_".join(f.split("_")[:2])
+        img_path = os.path.join(cfg.IMG_DIR, f)
+        mask_path = os.path.join(cfg.MASK_DIR, f)
+        if p in train_p:
+            train_imgs.append(img_path)
+            train_masks.append(mask_path)
+        elif p in val_p:
+            val_imgs.append(img_path)
+            val_masks.append(mask_path)
+    return (train_imgs, train_masks), (val_imgs, val_masks)
+
 def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
-    """
-    Core training loop for SegFormer MiT architectures.
-    Supports modular configuration (cfg) for multi-class or expert models.
-    """
-    if epochs is None: epochs = cfg.EPOCHS
-    if save_path is None: save_path = "best_model.pth"
+    if epochs is None: 
+        epochs = cfg.EPOCHS
+    if save_path is None: 
+        save_path = "best_model.pth"
 
     all_files = sorted(os.listdir(cfg.IMG_DIR))
     train_patients, val_patients, test_patients = get_stratified_splits(all_files)
     
-    def get_paths(patient_list):
-        imgs, masks = [], []
-        for f in all_files:
-            p = "_".join(f.split("_")[:2])
-            if p in patient_list:
-                imgs.append(os.path.join(cfg.IMG_DIR, f))
-                masks.append(os.path.join(cfg.MASK_DIR, f))
-        return imgs, masks
-
-    train_imgs, train_masks = get_paths(train_patients)
-    val_imgs, val_masks = get_paths(val_patients)
+    (train_imgs, train_masks), (val_imgs, val_masks) = distribute_files(all_files, train_patients, val_patients, cfg)
 
     if getattr(cfg, "USE_DYNAMIC_WEIGHTS", False):
         dyn_weights = calculate_dynamic_weights(train_masks, num_classes=cfg.NUM_LABELS)
@@ -169,7 +193,7 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
         num_training_steps=epochs
     )
     
-    scaler = torch.amp.GradScaler('cuda', enabled=cfg.USE_AMP)
+    scaler = torch.amp.GradScaler(cfg.DEVICE.type, enabled=cfg.USE_AMP)
     focal_criterion = FocalLoss(alpha=class_weights, gamma=getattr(cfg, "FOCAL_GAMMA", 2.0))
     
     tv_alpha = getattr(cfg, "TVERSKY_ALPHA", 0.3)
@@ -188,18 +212,22 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
         for i, batch in enumerate(pbar):
             pixel_values = batch["pixel_values"].to(cfg.DEVICE)
             labels = batch["labels"].to(cfg.DEVICE)
-            with torch.amp.autocast('cuda', enabled=cfg.USE_AMP):
+            with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = torch.nn.functional.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
-                main_loss = 0.5 * focal_criterion(logits, labels)
                 
+                focal_w = getattr(cfg, "FOCAL_WEIGHT", 0.5)
+                main_loss = focal_w * focal_criterion(logits, labels)
+                
+                aux_loss = 0.0
                 if getattr(cfg, "USE_TVERSKY", False) or getattr(cfg, "USE_FOCAL_TVERSKY", False):
-                    aux_loss = 0.5 * tversky_criterion(logits, labels)
-                else:
-                    aux_loss = 0.0
+                    tversky_w = getattr(cfg, "TVERSKY_WEIGHT", 0.5)
+                    aux_loss += tversky_w * tversky_criterion(logits, labels)
                     
                 if getattr(cfg, "USE_BOUNDARY_LOSS", False):
-                    aux_loss += min(0.1, 0.01 + (epoch * 0.0025)) * boundary_criterion(F.softmax(logits, dim=1), labels)
+                    b_alpha = getattr(cfg, "BOUNDARY_ALPHA", 0.1)
+                    b_w = min(b_alpha, (b_alpha / 10.0) + (epoch * (b_alpha / 40.0)))
+                    aux_loss += b_w * boundary_criterion(F.softmax(logits, dim=1), labels)
                 
                 loss = (main_loss + aux_loss) / cfg.ACCUMULATION_STEPS
             scaler.scale(loss).backward()
@@ -233,18 +261,26 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
                             new_p = np.zeros_like(p)
                             for c in range(1, cfg.NUM_LABELS):
                                 c_mask = (p == c).astype(np.uint8)
-                                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
-                                for lbl in range(1, num_labels):
-                                    if stats[lbl, cv2.CC_STAT_AREA] >= cfg.MIN_REGION_SIZE:
-                                        new_p[labels_im == lbl] = c
+                                if np.any(c_mask):
+                                    num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
+                                    for lbl in range(1, num_labels):
+                                        if stats[lbl, cv2.CC_STAT_AREA] >= cfg.MIN_REGION_SIZE:
+                                            new_p[labels_im == lbl] = c
                             cleaned_preds.append(new_p)
                         preds = np.array(cleaned_preds)
                         
                     for b_idx in range(len(preds)):
                         p, l_np = preds[b_idx], labels_np[b_idx]
                         for c in range(1, cfg.NUM_LABELS):
-                            if np.any(p == c) and np.any(l_np == c):
-                                class_hd95_vals[c].append(hd95(p == c, l_np == c))
+                            p_c = p == c
+                            l_c = l_np == c
+                            if np.any(p_c) and np.any(l_c):
+                                class_hd95_vals[c].append(hd95(p_c, l_c))
+                            elif np.any(l_c):
+                                class_hd95_vals[c].append(100.0) # Penalty for missing fluid entirely
+                            elif np.any(p_c):
+                                class_hd95_vals[c].append(100.0) # Penalty for false fluid prediction
+
                     mask_cm = (labels_np >= 0) & (labels_np < cfg.NUM_LABELS)
                     total_cm += np.bincount(cfg.NUM_LABELS * labels_np[mask_cm].astype(np.int64) + preds[mask_cm].astype(np.int64), minlength=cfg.NUM_LABELS**2).reshape(cfg.NUM_LABELS, cfg.NUM_LABELS)
             
@@ -253,7 +289,9 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
             means = [np.mean(class_hd95_vals[c]) for c in range(1, cfg.NUM_LABELS) if class_hd95_vals[c]]
             curr_mhd95 = np.mean(means) if means else 0.0
             avg_loss = epoch_loss / len(train_loader)
-            history["loss"].append(avg_loss); history["miou"].append(curr_miou); history["mhd95"].append(curr_mhd95)
+            history["loss"].append(avg_loss)
+            history["miou"].append(curr_miou)
+            history["mhd95"].append(curr_mhd95)
             logging.info(f"Epoch {epoch+1} | Loss: {avg_loss:.4f} | mIoU: {curr_miou:.4f} | mHD95: {curr_mhd95:.2f}")
             if curr_miou > best_miou:
                 best_miou = curr_miou
@@ -262,10 +300,17 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
 
         # Automated Plotting
         plt.figure(figsize=(12, 4))
-        plt.subplot(1, 3, 1); plt.plot(history["loss"]); plt.title("Loss")
-        plt.subplot(1, 3, 2); plt.plot(history["miou"]); plt.title("mIoU")
-        plt.subplot(1, 3, 3); plt.plot(history["mhd95"]); plt.title("mHD95")
-        plt.savefig(os.path.join(output_dir, "metrics.png")); plt.close()
+        plt.subplot(1, 3, 1)
+        plt.plot(history["loss"])
+        plt.title("Loss")
+        plt.subplot(1, 3, 2) 
+        plt.plot(history["miou"]) 
+        plt.title("mIoU")
+        plt.subplot(1, 3, 3)
+        plt.plot(history["mhd95"]) 
+        plt.title("mHD95")
+        plt.savefig(os.path.join(output_dir, "metrics.png"))
+        plt.close()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

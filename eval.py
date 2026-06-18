@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from dataset import OCTDataset
 from tqdm import tqdm
-import config
+import config as global_config
 from medpy.metric.binary import hd95, asd
 from utils import get_stratified_splits
 import logging
@@ -20,14 +20,16 @@ from PIL import Image
 # --- CLINICAL METRIC ANALYZERS ---
 
 class BoundaryPrecisionAnalyzer:
-    def __init__(self, kernel_size=3):
+    def __init__(self, kernel_size=3, cfg=global_config):
         self.kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        self.cfg = cfg
 
     def get_boundary_contrast(self, image, mask):
         if not np.any(mask): return 0.0
-        # For 2.5D image, use the central slice for boundary analysis
+        # Use centralized central slice parameter
         if image.ndim == 3 and image.shape[2] == 3:
-            image = image[:, :, 1]
+            slice_idx = getattr(self.cfg, "CENTRAL_SLICE_IDX", 1)
+            image = image[:, :, slice_idx]
         dilated = cv2.dilate(mask.astype(np.uint8), self.kernel, iterations=1)
         eroded = cv2.erode(mask.astype(np.uint8), self.kernel, iterations=1)
         outer_edge = dilated - mask.astype(np.uint8)
@@ -37,106 +39,102 @@ class BoundaryPrecisionAnalyzer:
         if len(outer_vals) == 0 or len(inner_vals) == 0: return 0.0
         return np.abs(np.mean(inner_vals) - np.mean(outer_vals))
 
-def get_retina_mask(img):
-    if img.ndim == 3 and img.shape[2] == 3:
-        img = img[:, :, 1] # Use central slice for mask
-    img_f = img.astype(np.float32)
-    if img_f.max() > 1.0: img_f /= 255.0
-    blurred = cv2.GaussianBlur(img_f, (31, 31), 0)
-    row_means = np.mean(blurred, axis=1)
-    mask_rows = row_means > 0.03
-    retina_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
-    if np.any(mask_rows):
-        rows = np.where(mask_rows)[0]
-        retina_mask[max(0, rows[0]-30):min(img.shape[0], rows[-1]+50), :] = 1
-    else:
-        retina_mask.fill(1)
-    return retina_mask
-
 # --- MODEL EVALUATION PIPELINE ---
 
-def evaluate_model(model_path="best_model.pth", output_dir="."):
+def evaluate_model(model_path="best_model.pth", output_dir=".", cfg=global_config):
     os.makedirs(output_dir, exist_ok=True)
     
     # 1. Load Data
-    all_files = sorted(os.listdir(config.IMG_DIR))
+    all_files = sorted(os.listdir(cfg.IMG_DIR))
     if os.path.exists("test_patients.txt"):
         with open("test_patients.txt", "r") as f: test_patients = f.read().splitlines()
     else:
         _, _, test_patients = get_stratified_splits(all_files)
     
-    test_imgs = [os.path.join(config.IMG_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
-    test_masks = [os.path.join(config.MASK_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
+    test_imgs = [os.path.join(cfg.IMG_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
+    test_masks = [os.path.join(cfg.MASK_DIR, f) for f in all_files if "_".join(f.split("_")[:2]) in test_patients]
 
-    # [REPLICATION] Scan raw masks for vis indices (Exactly like Test 15)
-    logging.info("Replicating Test 15 slice selection (scanning raw masks)...")
-    class_max_counts = {1: 0, 2: 0, 3: 0}
-    vis_indices = {1: -1, 2: -1, 3: -1}
+    # Dynamic target classes (skipping background 0)
+    target_classes = list(range(1, cfg.NUM_LABELS))
+
+    # [REPLICATION] Scan raw masks for vis indices (Dynamically sized to target classes)
+    logging.info("Replicating slice selection (scanning raw masks)...")
+    class_max_counts = {c: 0 for c in target_classes}
+    vis_indices = {c: -1 for c in target_classes}
     for i, m_path in enumerate(test_masks):
         m = np.array(Image.open(m_path))
-        for c in [1, 2, 3]:
+        
+        # Adapt for Binary Expert models where labels are 0 and 1
+        if getattr(cfg, "TARGET_CLASS", None) is not None:
+            # Map mask to binary matching expert behavior
+            binary_m = np.zeros_like(m)
+            binary_m[m == cfg.TARGET_CLASS] = 1
+            m = binary_m
+
+        for c in target_classes:
             cnt = np.sum(m == c)
             if cnt > class_max_counts[c]:
                 class_max_counts[c] = cnt
                 vis_indices[c] = i
-    logging.info(f"Fixed vis indices to match Test 15: {vis_indices}")
+    logging.info(f"Dynamic vis indices: {vis_indices}")
 
     # 2. Model Init
-    processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
-    model = SegformerForSemanticSegmentation.from_pretrained(config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True, output_attentions=True)
+    processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
+    model = SegformerForSemanticSegmentation.from_pretrained(cfg.MODEL_NAME, num_labels=cfg.NUM_LABELS, ignore_mismatched_sizes=True, output_attentions=True)
     
     if os.path.exists(model_path):
         logging.info(f"Loading weights from {model_path}")
-        state_dict = torch.load(model_path, map_location=config.DEVICE, weights_only=True)
+        state_dict = torch.load(model_path, map_location=cfg.DEVICE, weights_only=True)
         model.load_state_dict(state_dict, strict=False)
     
-    model.to(config.DEVICE).eval()
+    model.to(cfg.DEVICE).eval()
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
 
     # 3. Setup Dataset
-    val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
-    dataset = OCTDataset(test_imgs, test_masks, processor, transform=val_transform, use_multimodal=config.USE_MULTIMODAL)
-    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
+    val_transform = A.Compose([A.Resize(height=cfg.AUG_SIZE[0], width=cfg.AUG_SIZE[1])])
+    target_cls = getattr(cfg, "TARGET_CLASS", None)
+    dataset = OCTDataset(test_imgs, test_masks, processor, transform=val_transform, use_multimodal=cfg.USE_MULTIMODAL, target_class=target_cls, cfg=cfg)
+    
+    # Use 2 workers for faster disk I/O throughput during evaluation
+    loader = DataLoader(dataset, batch_size=cfg.BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
 
     # 4. State
-    total_cm = np.zeros((config.NUM_LABELS, config.NUM_LABELS), dtype=np.int64)
-    class_hd95_vals = {1: [], 2: [], 3: []}
-    class_asd_vals = {1: [], 2: [], 3: []}
-    class_region_counts_gt = {1: [], 2: [], 3: []}
-    class_region_counts_pred = {1: [], 2: [], 3: []}
-    class_boundary_diffs = {1: [], 2: [], 3: []}
-    class_pixel_areas_gt = {1: [], 2: [] , 3: []}
+    total_cm = np.zeros((cfg.NUM_LABELS, cfg.NUM_LABELS), dtype=np.int64)
+    class_hd95_vals = {c: [] for c in target_classes}
+    class_asd_vals = {c: [] for c in target_classes}
+    class_region_counts_gt = {c: [] for c in target_classes}
+    class_region_counts_pred = {c: [] for c in target_classes}
+    class_boundary_diffs = {c: [] for c in target_classes}
+    class_pixel_areas_gt = {c: [] for c in target_classes}
     
-    # Store visualization data separately for target indices
     vis_data = {} 
 
     # 5. Evaluation Loop
     logging.info(f"Evaluating on {len(dataset)} slices...")
     global_idx = 0
     for batch in tqdm(loader):
-        pixel_values = batch["pixel_values"].to(config.DEVICE)
+        pixel_values = batch["pixel_values"].to(cfg.DEVICE)
         labels_batch = batch["labels"].numpy()
         orig_img_batch = batch["orig_img"].numpy()
         
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values)
-            logits = torch.nn.functional.interpolate(outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False)
+            logits = torch.nn.functional.interpolate(outputs.logits, size=cfg.AUG_SIZE, mode="bilinear", align_corners=False)
             
-            # [FIX] Better Attention Map: Use Stage 2 (64x64) for better detail than Stage 4 (16x16)
-            # attentions is a list of 4 stages. Stage 1 is index 1.
+            # Extract Stage 2 attention (64x64 resolution) for rich context visualization
             att_stage = outputs.attentions[1] 
-            avg_att = torch.mean(att_stage, dim=1) # Mean over heads
-            spatial_att = torch.mean(avg_att, dim=1) # Mean over queries
+            avg_att = torch.mean(att_stage, dim=1) 
+            spatial_att = torch.mean(avg_att, dim=1) 
             grid_size = int(np.sqrt(spatial_att.shape[1]))
             att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
             
-            if getattr(config, "USE_TTA", False):
-                scales = getattr(config, "TTA_SCALES", [1.0])
+            if getattr(cfg, "USE_TTA", False):
+                scales = getattr(cfg, "TTA_SCALES", [1.0])
                 all_logits = []
                 
                 for s in scales:
                     if s != 1.0:
-                        scaled_size = (int(config.AUG_SIZE[0] * s), int(config.AUG_SIZE[1] * s))
+                        scaled_size = (int(cfg.AUG_SIZE[0] * s), int(cfg.AUG_SIZE[1] * s))
                         scaled_pixels = torch.nn.functional.interpolate(
                             pixel_values, size=scaled_size, mode="bilinear", align_corners=False
                         )
@@ -145,14 +143,14 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                     
                     s_outputs = model(pixel_values=scaled_pixels)
                     s_logits = torch.nn.functional.interpolate(
-                        s_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                        s_outputs.logits, size=cfg.AUG_SIZE, mode="bilinear", align_corners=False
                     )
                     all_logits.append(s_logits)
                     
                     f_pixels = torch.flip(scaled_pixels, [3])
                     f_outputs = model(pixel_values=f_pixels)
                     f_logits = torch.nn.functional.interpolate(
-                        f_outputs.logits, size=config.AUG_SIZE, mode="bilinear", align_corners=False
+                        f_outputs.logits, size=cfg.AUG_SIZE, mode="bilinear", align_corners=False
                     )
                     uf_logits = torch.flip(f_logits, [3])
                     all_logits.append(uf_logits)
@@ -161,42 +159,43 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
             
-            # --- MORPHOLOGICAL SHARPENING FOR PED (Class 3) ---
-            # SegFormer's bilinear upsampling smooths out sharp peaks. We apply a sharpening 
-            # filter to the PED probability map to restore the "spiky" clinical appearance.
-            sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-            for b_idx in range(probs_batch.shape[0]):
-                ped_prob = probs_batch[b_idx, 3, :, :]
-                sharp_ped = cv2.filter2D(ped_prob, -1, sharpen_kernel)
-                probs_batch[b_idx, 3, :, :] = np.clip(sharp_ped, 0, 1)
+            # --- CLINICAL HEURISTIC: MORPHOLOGICAL SHARPENING FOR PED ---
+            # Compensates for bilinear blurring of peaks in SegFormer. Applied only if PED exists (Class 3).
+            if cfg.NUM_LABELS > 3:
+                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                for b_idx in range(probs_batch.shape[0]):
+                    ped_prob = probs_batch[b_idx, 3, :, :]
+                    sharp_ped = cv2.filter2D(ped_prob, -1, sharpen_kernel)
+                    probs_batch[b_idx, 3, :, :] = np.clip(sharp_ped, 0, 1)
 
-            # [CLINICAL UPDATE] Threshold-based prediction to maximize recall instead of simple argmax
+            # --- CLINICAL HEURISTIC: REVERSE-PRIORITY THRESHOLDING ---
+            # Maximize sensitivity for high-risk findings (e.g. fluid/cysts) by overriding background argmax.
             preds_batch = np.zeros(probs_batch.shape[0:1] + probs_batch.shape[2:], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {1: 0.5, 2: 0.5, 3: 0.5})
+            thresholds = getattr(cfg, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes})
             
-            # Apply in reverse priority. IRF (1) is applied last so it overwrites background/others
-            for c in [3, 2, 1]:
+            # Loop backwards through target classes so high-priority categories (like class 1) get laid down last
+            for c in reversed(target_classes):
                 thresh = thresholds.get(c, 0.5)
                 preds_batch[probs_batch[:, c] > thresh] = c
             
-            if getattr(config, "MIN_REGION_SIZE", 0) > 0:
+            if getattr(cfg, "MIN_REGION_SIZE", 0) > 0:
                 cleaned_preds = []
                 kernel_3x3 = np.ones((3, 3), np.uint8)
                 for b_idx in range(len(preds_batch)):
                     p = preds_batch[b_idx]
                     new_p = np.zeros_like(p)
-                    for c in range(1, config.NUM_LABELS):
+                    for c in target_classes:
                         c_mask = (p == c).astype(np.uint8)
                         
-                        # --- MORPHOLOGICAL SEPARATION FOR IRF (Class 1) ---
-                        # Break thin bridges that cause distinct cysts to merge into one blob.
-                        if c == 1:
-                            c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
-                            
-                        num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
-                        for label in range(1, num_labels):
-                            if stats[label, cv2.CC_STAT_AREA] >= config.MIN_REGION_SIZE:
-                                new_p[labels_im == label] = c
+                        if np.any(c_mask):
+                            # Morphological separation for IRF (Class 1) to break thin false-positive bridges
+                            if c == 1 and cfg.NUM_LABELS > 1:
+                                c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
+                                
+                            num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                            for label in range(1, num_labels):
+                                if stats[label, cv2.CC_STAT_AREA] >= cfg.MIN_REGION_SIZE:
+                                    new_p[labels_im == label] = c
                     cleaned_preds.append(new_p)
                 preds_batch = np.array(cleaned_preds)
 
@@ -204,20 +203,19 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
             labels, pred, att_map = labels_batch[b_idx], preds_batch[b_idx], att_maps[b_idx]
             orig_img = orig_img_batch[b_idx]
             
-            # Check if this is a target index for visualization
             for c_key, t_idx in vis_indices.items():
-                if global_idx == t_idx:
+                if global_idx == t_idx and t_idx != -1:
                     vis_data[c_key] = (orig_img, labels, pred, att_map)
 
-            mask = (labels >= 0) & (labels < config.NUM_LABELS)
-            total_cm += np.bincount(config.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=config.NUM_LABELS**2).reshape(config.NUM_LABELS, config.NUM_LABELS)
+            mask = (labels >= 0) & (labels < cfg.NUM_LABELS)
+            total_cm += np.bincount(cfg.NUM_LABELS * labels[mask].astype(np.int64) + pred[mask].astype(np.int64), minlength=cfg.NUM_LABELS**2).reshape(cfg.NUM_LABELS, cfg.NUM_LABELS)
 
-            for c in [1, 2, 3]:
+            for c in target_classes:
                 gt_c, pred_c = (labels == c), (pred == c)
                 if np.any(gt_c):
                     _, gt_num = ndimage.label(gt_c)
                     class_region_counts_gt[c].append(gt_num)
-                    class_boundary_diffs[c].append(BoundaryPrecisionAnalyzer().get_boundary_contrast(orig_img, gt_c))
+                    class_boundary_diffs[c].append(BoundaryPrecisionAnalyzer(cfg=cfg).get_boundary_contrast(orig_img, gt_c))
                     class_pixel_areas_gt[c].append(np.sum(gt_c))
                 if np.any(pred_c):
                     _, pred_num = ndimage.label(pred_c)
@@ -227,53 +225,49 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
                     class_asd_vals[c].append(asd(pred_c, gt_c))
             global_idx += 1
 
-    # 6. Replicated Visualization Grid
-    logging.info("Generating predictions.png (Exact Test 15 indices)...")
-    plt.figure(figsize=(22, 16))
-    for i, c_id in enumerate([1, 2, 3]):
-        if c_id not in vis_data: continue
-        img, gt, prd, att = vis_data[c_id]
+    # 6. Grid Visualization Generator
+    logging.info("Generating predictions.png...")
+    num_plots = len(vis_data)
+    if num_plots > 0:
+        plt.figure(figsize=(22, 5 * num_plots))
+        for i, c_id in enumerate(vis_data.keys()):
+            img, gt, prd, att = vis_data[c_id]
+            
+            ax1 = plt.subplot(num_plots, 4, i*4+1)
+            ax1.imshow(img) 
+            ax1.set_title(f"OCT: {cfg.CLASS_NAMES.get(c_id, f'Class {c_id}')}", fontsize=14, fontweight='bold')
+            ax1.axis("off")
+            
+            ax2 = plt.subplot(num_plots, 4, i*4+2)
+            ax2.imshow(gt, cmap="jet", vmin=0, vmax=cfg.NUM_LABELS-1)
+            ax2.set_title(f"GT (px: {class_max_counts[c_id]})", fontsize=12)
+            ax2.axis("off")
+            
+            tp = np.sum((gt == c_id) & (prd == c_id))
+            fp = np.sum((gt != c_id) & (prd == c_id))
+            fn = np.sum((gt == c_id) & (prd != c_id))
+            c_iou = tp / (tp + fp + fn + 1e-6)
+            
+            ax3 = plt.subplot(num_plots, 4, i*4+3)
+            ax3.imshow(prd, cmap="jet", vmin=0, vmax=cfg.NUM_LABELS-1)
+            ax3.set_title(f"Prediction (IoU: {c_iou:.2f})", fontsize=12)
+            ax3.axis("off")
+            
+            ax4 = plt.subplot(num_plots, 4, i*4+4)
+            att_resized = cv2.resize(att, (img.shape[1], img.shape[0]))
+            att_norm = (att_resized - att_resized.min()) / (att_resized.max() - att_resized.min() + 1e-8)
+            att_norm = np.power(att_norm, getattr(cfg, "ATTENTION_CONTRAST", 0.6))
+            
+            gray_bg = img[:, :, 1] if img.ndim == 3 else img
+            ax4.imshow(gray_bg, cmap="gray")
+            ax4.imshow(att_norm, cmap="jet", alpha=0.5)
+            ax4.set_title("Self-Attention (Stage 2)", fontsize=12)
+            ax4.axis("off")
         
-        # Display OCT - Restore colored 2.5D view if applicable
-        ax1 = plt.subplot(3, 4, i*4+1)
-        ax1.imshow(img) # Restore RGB/2.5D view to match Test 15
-        ax1.set_title(f"OCT: {config.CLASS_NAMES[c_id]}", fontsize=14, fontweight='bold')
-        ax1.axis("off")
-        
-        # Display Ground Truth
-        ax2 = plt.subplot(3, 4, i*4+2)
-        ax2.imshow(gt, cmap="jet", vmin=0, vmax=3)
-        ax2.set_title(f"GT (px: {class_max_counts[c_id]})", fontsize=12)
-        ax2.axis("off")
-        
-        # Display Prediction
-        tp = np.sum((gt == c_id) & (prd == c_id))
-        fp = np.sum((gt != c_id) & (prd == c_id))
-        fn = np.sum((gt == c_id) & (prd != c_id))
-        c_iou = tp / (tp + fp + fn + 1e-6)
-        
-        ax3 = plt.subplot(3, 4, i*4+3)
-        ax3.imshow(prd, cmap="jet", vmin=0, vmax=3)
-        ax3.set_title(f"Prediction (IoU: {c_iou:.2f})", fontsize=12)
-        ax3.axis("off")
-        
-        # Display Shaper Attention Map (Stage 2)
-        ax4 = plt.subplot(3, 4, i*4+4)
-        att_resized = cv2.resize(att, (img.shape[1], img.shape[0]))
-        att_norm = (att_resized - att_resized.min()) / (att_resized.max() - att_resized.min() + 1e-8)
-        att_norm = np.power(att_norm, 0.6) # Even higher contrast for Stage 2
-        
-        # Use grayscale for attention background for clarity
-        gray_bg = img[:, :, 1] if img.ndim == 3 else img
-        ax4.imshow(gray_bg, cmap="gray")
-        ax4.imshow(att_norm, cmap="jet", alpha=0.5)
-        ax4.set_title("Self-Attention (Stage 2)", fontsize=12)
-        ax4.axis("off")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=200, bbox_inches='tight')
+        plt.close()
     
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=200, bbox_inches='tight')
-    plt.close()
-
     # 7. Aggregate Metrics
     tp = np.diag(total_cm)
     fp, fn = total_cm.sum(axis=0) - tp, total_cm.sum(axis=1) - tp
@@ -283,15 +277,15 @@ def evaluate_model(model_path="best_model.pth", output_dir="."):
 
     return {
         'params': total_params, 'mIoU': np.mean(ious), 'mDice': np.mean(dices),
-        'class_ious': {c: ious[c] for c in range(4)}, 'class_dices': {c: dices[c] for c in range(4)},
-        'class_hd95': {c: safe_mean(class_hd95_vals[c]) for c in [1, 2, 3]},
-        'class_asd': {c: safe_mean(class_asd_vals[c]) for c in [1, 2, 3]},
-        'class_avg_regions_gt': {c: safe_mean(class_region_counts_gt[c]) for c in [1, 2, 3]},
-        'class_avg_regions_pred': {c: safe_mean(class_region_counts_pred[c]) for c in [1, 2, 3]},
-        'class_boundary_precision': {c: safe_mean(class_boundary_diffs[c]) for c in [1, 2, 3]},
-        'class_avg_pixel_area': {c: safe_mean(class_pixel_areas_gt[c]) for c in [1, 2, 3]},
-        'mHD95': safe_mean([safe_mean(class_hd95_vals[c]) for c in [1, 2, 3] if class_hd95_vals[c]]),
-        'mASD': safe_mean([safe_mean(class_asd_vals[c]) for c in [1, 2, 3] if class_asd_vals[c]])
+        'class_ious': {c: ious[c] for c in range(cfg.NUM_LABELS)}, 'class_dices': {c: dices[c] for c in range(cfg.NUM_LABELS)},
+        'class_hd95': {c: safe_mean(class_hd95_vals[c]) for c in target_classes},
+        'class_asd': {c: safe_mean(class_asd_vals[c]) for c in target_classes},
+        'class_avg_regions_gt': {c: safe_mean(class_region_counts_gt[c]) for c in target_classes},
+        'class_avg_regions_pred': {c: safe_mean(class_region_counts_pred[c]) for c in target_classes},
+        'class_boundary_precision': {c: safe_mean(class_boundary_diffs[c]) for c in target_classes},
+        'class_avg_pixel_area': {c: safe_mean(class_pixel_areas_gt[c]) for c in target_classes},
+        'mHD95': safe_mean([safe_mean(class_hd95_vals[c]) for c in target_classes if class_hd95_vals[c]]),
+        'mASD': safe_mean([safe_mean(class_asd_vals[c]) for c in target_classes if class_asd_vals[c]])
     }
 
 if __name__ == "__main__":
@@ -308,7 +302,8 @@ if __name__ == "__main__":
     logging.info(f"Starting Standalone Evaluation. Results will be in: {eval_dir}")
     target_model = "best_model.pth"
     if not os.path.exists(target_model):
-        logging.error(f"Model {target_model} not found! Please place best_model.pth in the project root."); sys.exit(1)
+        logging.error(f"Model {target_model} not found! Please place best_model.pth in the project root.")
+        sys.exit(1)
         
     try:
         metrics = evaluate_model(model_path=target_model, output_dir=eval_dir)
@@ -316,8 +311,8 @@ if __name__ == "__main__":
         logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
         logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
         logging.info("--- CLASS-SPECIFIC FINDINGS ---")
-        for c in [1, 2, 3]:
-            name = config.CLASS_NAMES[c]
+        for c in range(1, global_config.NUM_LABELS):
+            name = global_config.CLASS_NAMES[c]
             logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
         logging.info(f"Evaluation complete. Artifacts saved in: {eval_dir}")
     except Exception as e:
