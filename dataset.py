@@ -7,6 +7,11 @@ from torch.utils.data import Dataset
 from typing import List, Dict, Any, Optional
 import config as global_config
 
+class PicklableConfig:
+    def __init__(self, cfg):
+        self.USE_25D = getattr(cfg, "USE_25D", False)
+        self.AUG_SIZE = getattr(cfg, "AUG_SIZE", None)
+
 class OCTDataset(Dataset):
     """
     Patient-aware OCT image loader.
@@ -28,7 +33,7 @@ class OCTDataset(Dataset):
         self.transform = transform
         self.use_multimodal = use_multimodal
         self.target_class = target_class
-        self.cfg = cfg
+        self.cfg = PicklableConfig(cfg)
 
     def __len__(self) -> int:
         return len(self.image_paths)
