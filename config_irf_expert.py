@@ -6,6 +6,7 @@ from config import * # Inherit base settings
 MODEL_NAME = "nvidia/mit-b0" # Lightweight expert
 NUM_LABELS = 2 # Binary: Background vs IRF
 TARGET_CLASS = 1 # Focus exclusively on IRF
+USE_25D = False # Force 2D for expert model
 
 # --- AGGRESSIVE RECALL HYPERPARAMETERS ---
 LR = 7e-5 # Slightly higher for smaller model

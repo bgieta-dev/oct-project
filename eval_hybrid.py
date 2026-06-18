@@ -36,24 +36,37 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
     
     logging.info(f"Testing on {len(test_imgs)} images from {len(test_patients)} patients.")
 
-    # 3. Metrics Accumulators
+    # 3. Setup Test Dataset with correct transforms and 2.5D config
+    val_transform = None
+    if hasattr(config, "AUG_SIZE") and config.AUG_SIZE is not None:
+        import albumentations as A
+        val_transform = A.Compose([A.Resize(height=config.AUG_SIZE[0], width=config.AUG_SIZE[1])])
+        
+    ds = OCTDataset(
+        image_paths=test_imgs,
+        mask_paths=test_masks,
+        processor=engine.processor,
+        transform=val_transform,
+        cfg=config
+    )
+    
+    logging.info(f"Testing on {len(ds)} images from {len(test_patients)} patients using OCTDataset workflow.")
+
+    # 4. Metrics Accumulators
     num_classes = config.NUM_LABELS
     total_cm = np.zeros((num_classes, num_classes), dtype=np.int64)
     class_hd95 = {c: [] for c in range(1, num_classes)}
     class_regions_gt = {c: [] for c in range(1, num_classes)}
     class_regions_pred = {c: [] for c in range(1, num_classes)}
 
-    # 4. Evaluation Loop
-    for idx in tqdm(range(len(test_imgs)), desc="Evaluating Hybrid"):
-        # Load Image
-        img_pil = Image.open(test_imgs[idx]).convert("RGB")
-        img_np = np.array(img_pil)
-        
-        # Load GT Mask
-        gt_mask = np.array(Image.open(test_masks[idx])).astype(np.uint8)
+    # 5. Evaluation Loop
+    for idx in tqdm(range(len(ds)), desc="Evaluating Hybrid"):
+        batch = ds[idx]
+        image_np = batch["orig_img"] # Contains proper 2.5D context [H, W, 3] or Multimodal
+        gt_mask = batch["labels"].numpy().astype(np.uint8)
         
         # Predict using Hybrid Engine
-        pred_mask = engine.segment(img_np)
+        pred_mask = engine.segment(image_np)
         
         # Update Confusion Matrix
         mask_valid = (gt_mask >= 0) & (gt_mask < num_classes)
@@ -79,9 +92,9 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
         
         # Optional: Save visual comparison for first 10 images
         if idx < 10:
-            save_viz(img_np, gt_mask, pred_mask, os.path.join(output_dir, f"viz_{idx}.png"))
+            save_viz(image_np[:, :, 1] if len(image_np.shape) == 3 else image_np, gt_mask, pred_mask, os.path.join(output_dir, f"viz_{idx}.png"))
 
-    # 5. Final Metrics Calculation
+    # 6. Final Metrics Calculation
     ious = np.diag(total_cm) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) - np.diag(total_cm) + 1e-6)
     dices = (2 * np.diag(total_cm)) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) + 1e-6)
     

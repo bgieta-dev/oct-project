@@ -29,19 +29,23 @@ class HybridInference:
     @torch.no_grad()
     def segment(self, image_np):
         """
-        Input: Raw RGB/Grayscale image [H, W, C]
+        Input: Raw 2.5D/Multimodal image [H, W, 3] from OCTDataset
         Output: Merged Mask [H, W] (0=BG, 1=IRF, 2=SRF, 3=PED)
         """
-        inputs = self.processor(images=image_np, return_tensors="pt").to(self.device)
-        
         # --- PASS 1: BASE MODEL ---
-        base_out = self.base_model(**inputs).logits
+        inputs_base = self.processor(images=image_np, return_tensors="pt").to(self.device)
+        base_out = self.base_model(**inputs_base).logits
         base_logits = F.interpolate(base_out, size=image_np.shape[:2], mode="bilinear", align_corners=False)
         base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
         base_mask = np.argmax(base_probs, axis=0).astype(np.uint8)
         
-        # --- PASS 2: EXPERT MODEL ---
-        expert_out = self.expert_model(**inputs).logits
+        # --- PASS 2: EXPERT MODEL (Pure 2D) ---
+        # Extract middle slice (S_n) from 2.5D context and replicate to 3 channels for processor
+        image_2d = image_np[:, :, 1] if len(image_np.shape) == 3 else image_np
+        image_2d_rgb = np.stack([image_2d, image_2d, image_2d], axis=-1)
+        
+        inputs_expert = self.processor(images=image_2d_rgb, return_tensors="pt").to(self.device)
+        expert_out = self.expert_model(**inputs_expert).logits
         expert_logits = F.interpolate(expert_out, size=image_np.shape[:2], mode="bilinear", align_corners=False)
         expert_probs = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()
         expert_irf_prob = expert_probs[1] # Probability of IRF
@@ -49,24 +53,14 @@ class HybridInference:
         # --- ENSEMBLE MERGING LOGIC ---
         final_mask = base_mask.copy()
         
-        # Clear base IRF to let expert take over or refine
-        # 0: BG, 1: IRF, 2: SRF, 3: PED
-        
-        # Strategy: 
-        # 1. Start with Base Model's SRF and PED (structural)
-        # 2. Expert IRF takes priority over Base IRF and Base BG
-        
         # Threshold for Expert IRF (aggressive)
-        irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.35})[1]
+        irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.25})[1]
         expert_irf_mask = (expert_irf_prob > irf_threshold)
         
-        # Conflict Resolution:
-        # If expert says IRF, it overrides BG and existing Base IRF.
-        # It does NOT override SRF/PED to avoid anatomical corruption (structural layers).
-        
-        for c in [0, 1]: # Background and Base-predicted IRF
-            mask_to_replace = (final_mask == c)
-            final_mask[mask_to_replace & expert_irf_mask] = 1
+        # Conflict Resolution: Vectorized
+        # If expert says IRF, it overrides BG (0) and existing Base IRF (1).
+        # It does NOT override SRF (2) / PED (3) to avoid anatomical corruption.
+        final_mask[(final_mask <= 1) & expert_irf_mask] = 1
             
         # Optional: Clean up tiny noise artifacts
         if getattr(config, "MIN_REGION_SIZE", 0) > 0:
