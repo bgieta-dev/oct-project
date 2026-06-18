@@ -1,0 +1,14 @@
+numpy
+Pillow
+transformers
+albumentations
+scikit-learn
+matplotlib
+tqdm
+medpy
+SimpleITK
+scipy
+python-dotenv
+monai
+einops
+opencv-python-headless

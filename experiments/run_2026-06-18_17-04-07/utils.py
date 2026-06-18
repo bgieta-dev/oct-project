@@ -3,8 +3,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from typing import Tuple, List
 
-# Robust Regex Pattern for filename format: {device}_{patient_id}_{slice_id}.<extension> (e.g. .png, .tiff)
-FILENAME_PATTERN = re.compile(r"^(?P<device>[^_]+)_(?P<patient_id>[^_]+)_(?P<slice_id>.+)\.[a-zA-Z0-9]+$")
+# Robust Regex Pattern for filename format: {device}_{patient_id}_{slice_id}.png
+FILENAME_PATTERN = re.compile(r"^(?P<device>[^_]+)_(?P<patient_id>[^_]+)_(?P<slice_id>.+)\.png$")
 
 def get_stratified_splits(all_files: List[str], seed: int = 42) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -37,7 +37,7 @@ def get_stratified_splits(all_files: List[str], seed: int = 42) -> Tuple[np.ndar
             patient_to_device[patient] = device
             
     if not patient_to_device:
-        raise ValueError("No valid patient files found matching the expected pattern {device}_{patient_id}_{slice_id}.<extension>")
+        raise ValueError("No valid patient files found matching the expected pattern {device}_{patient_id}_{slice_id}.png")
         
     patients = np.array(list(patient_to_device.keys()))
     devices = np.array(list(patient_to_device.values()))
