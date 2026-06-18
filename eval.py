@@ -230,7 +230,9 @@ def evaluate_model(model_path="best_model.pth", output_dir=".", cfg=global_confi
     num_plots = len(vis_data)
     if num_plots > 0:
         plt.figure(figsize=(22, 5 * num_plots))
-        for i, c_id in enumerate(vis_data.keys()):
+        # Ensure rows are ordered logically by class ID (1=IRF, 2=SRF, 3=PED) instead of random insertion sequence
+        sorted_c_ids = [c for c in target_classes if c in vis_data]
+        for i, c_id in enumerate(sorted_c_ids):
             img, gt, prd, att = vis_data[c_id]
             
             ax1 = plt.subplot(num_plots, 4, i*4+1)

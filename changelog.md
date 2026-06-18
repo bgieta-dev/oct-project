@@ -26,13 +26,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     - Standardized medical normalization into a single internal helper `_normalize_slice`, reducing computing redundancy.
     - Refactored 2.5D volumetric loading into an independent function `_load_neighbor` to avoid closure scope risks.
     - Hardened filename segment parsing to gracefully handle variations in underscore placement.
-- **Evaluation Engine Modernization (`eval.py`)**:
+- **Evaluation Engine Modernization & Standalone CLI (`eval.py`)**:
     - Decoupled script from global imports: `evaluate_model` now accepts an explicit configuration object `cfg`.
     - Automated dynamic label handling: eliminated all hardcoded `[1, 2, 3]` arrays, dynamically constructing loops via `range(1, cfg.NUM_LABELS)`.
     - Added Binary Expert support: implemented mask re-mapping logic during visual selection when evaluating binary sub-models.
     - Optimized throughput: increased `num_workers=2` and enabled `pin_memory=True` for accelerated asynchronous disk I/O throughput.
     - Robust plotting layout: dynamically adjust grid generation sizing depending on the count of parsed target classes.
     - Removed Dead Code: Completely stripped out the vestigial `get_retina_mask` function and its dead imports from `train.py`.
+    - Implemented CLI argument parsing (`argparse`) supporting `--model` and `--output` flags to allow flexible standalone evaluation runs without hardcoded weights path assumptions.
+    - Wrapped execution logic inside an encapsulated `main()` entry block with clean, isolated logger instances to prevent downstream logging module conflicts or unexpected console side-effects.
+- **Resilient Pipeline Orchestration (`main.py`)**:
+    - Implemented comprehensive fault tolerance by execution isolation across distinct trial phases, preventing down-stream visual or interpretability script glitches from aborting clinical metric captures.
+    - Replaced hardcoded script archive tracking arrays with a dynamic filesystem crawl across the workspace root, preserving architectural state snapshots while adhering strictly to historical dataset folder constraints.
+    - Embedded proactive available-VRAM safety diagnostic queries (`torch.cuda.mem_get_info`) to issue runtime structural bottleneck warnings early.
+- **Stratified Patient Split Hardening (`utils.py`)**:
+    - Generalized the regular expression `FILENAME_PATTERN` to support format-neutral filename suffixes (e.g., matching `.tiff` alongside `.png`), fixing data-discovery blockages during patient-stratified split generation.
 - **Configuration Centralization (`config.py`)**:
     - Eliminated implementation magic number leakage by explicitly centralizing `FOCAL_WEIGHT`, `TVERSKY_WEIGHT`, and `ATTENTION_CONTRAST`.
     - Centralized clinical anatomical heuristics parameters: defined `CENTRAL_SLICE_IDX` to enable rapid heuristic tuning without code refactoring.
