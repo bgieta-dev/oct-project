@@ -288,34 +288,62 @@ def evaluate_model(model_path="best_model.pth", output_dir=".", cfg=global_confi
         'mASD': safe_mean([safe_mean(class_asd_vals[c]) for c in target_classes if class_asd_vals[c]])
     }
 
-if __name__ == "__main__":
+def setup_logging(log_file: str):
+    """Sets up an isolated logger instance to avoid global logging side-effects."""
     import sys
+    logger = logging.getLogger("eval_standalone")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear() # Clear any existing handlers
+    
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    
+    fh = logging.FileHandler(log_file)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+    
+    return logger
+
+def main():
+    import argparse
     from datetime import datetime
+    import traceback
+    import sys
+    
+    parser = argparse.ArgumentParser(description="Standalone Clinical Evaluation Pipeline for OCT Segmentation")
+    parser.add_argument("--model", type=str, default="best_model.pth", help="Path to the trained model checkpoint (.pth)")
+    parser.add_argument("--output", type=str, help="Override output directory for metrics and visual graphs")
+    args = parser.parse_args()
+    
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    eval_dir = os.path.abspath(f"eval_results_{timestamp}")
+    eval_dir = args.output or os.path.abspath(f"eval_results_{timestamp}")
     os.makedirs(eval_dir, exist_ok=True)
     
     log_file = os.path.join(eval_dir, "eval_standalone.log")
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)])
+    logger = setup_logging(log_file)
     
-    logging.info(f"Starting Standalone Evaluation. Results will be in: {eval_dir}")
-    target_model = "best_model.pth"
-    if not os.path.exists(target_model):
-        logging.error(f"Model {target_model} not found! Please place best_model.pth in the project root.")
+    logger.info(f"Starting Standalone Evaluation. Results will be saved to: {eval_dir}")
+    if not os.path.exists(args.model):
+        logger.error(f"Model checkpoint NOT FOUND at: {args.model}. Please supply a correct path via --model.")
         sys.exit(1)
         
     try:
-        metrics = evaluate_model(model_path=target_model, output_dir=eval_dir)
-        logging.info("--- EVALUATION RESULTS ---")
-        logging.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
-        logging.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
-        logging.info("--- CLASS-SPECIFIC FINDINGS ---")
+        metrics = evaluate_model(model_path=args.model, output_dir=eval_dir, cfg=global_config)
+        logger.info("--- GLOBAL EVALUATION RESULTS ---")
+        logger.info(f"Final mIoU: {metrics['mIoU']:.4f} | Final mDice: {metrics['mDice']:.4f}")
+        logger.info(f"Final mHD95: {metrics['mHD95']:.4f} | Final mASD: {metrics['mASD']:.4f}")
+        logger.info("--- CLASS-SPECIFIC FINDINGS ---")
         for c in range(1, global_config.NUM_LABELS):
             name = global_config.CLASS_NAMES[c]
-            logging.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
-        logging.info(f"Evaluation complete. Artifacts saved in: {eval_dir}")
-    except Exception as e:
-        import traceback
-        logging.error("CRITICAL ERROR in standalone evaluation:")
-        logging.error(traceback.format_exc())
+            logger.info(f"Class {c} ({name}) | IoU: {metrics['class_ious'][c]:.4f} | Dice: {metrics['class_dices'][c]:.4f} | HD95: {metrics['class_hd95'][c]:.2f}")
+        logger.info(f"Evaluation complete. All clinical artifacts saved in: {eval_dir}")
+    except Exception:
+        logger.error("CRITICAL ERROR encountered during standalone evaluation:")
+        logger.error(traceback.format_exc())
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
