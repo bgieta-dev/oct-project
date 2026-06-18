@@ -153,7 +153,11 @@ def train_model(epochs=None, save_path=None, output_dir=".", cfg=config):
     (train_imgs, train_masks), (val_imgs, val_masks) = distribute_files(all_files, train_patients, val_patients, cfg)
 
     if getattr(cfg, "USE_DYNAMIC_WEIGHTS", False):
-        dyn_weights = calculate_dynamic_weights(train_masks, num_classes=cfg.NUM_LABELS)
+        dyn_weights = calculate_dynamic_weights(
+            train_masks, 
+            num_classes=cfg.NUM_LABELS, 
+            target_class=getattr(cfg, "TARGET_CLASS", None)
+        )
         class_weights = torch.tensor(dyn_weights, dtype=torch.float32).to(cfg.DEVICE)
     else:
         class_weights = torch.tensor(cfg.CLASS_WEIGHTS).to(cfg.DEVICE)
