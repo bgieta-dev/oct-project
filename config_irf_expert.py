@@ -8,20 +8,21 @@ NUM_LABELS = 2 # Binary: Background vs IRF
 TARGET_CLASS = 1 # Focus exclusively on IRF
 USE_25D = False # Force 2D for expert model
 
-# --- AGGRESSIVE RECALL HYPERPARAMETERS ---
-LR = 7e-5 # Slightly higher for smaller model
+# --- BALANCED EXPERT HYPERPARAMETERS ---
+USE_DYNAMIC_WEIGHTS = False # Use fixed weights for stability
+LR = 5e-5 # Lower LR for stability
 EPOCHS = 60
-CLASS_WEIGHTS = [0.1, 10.0] # Massive weight on IRF
+CLASS_WEIGHTS = [1.0, 8.0] # More balanced ratio
 
 # Loss weighting (tuning the balance between Focal and Tversky)
-FOCAL_WEIGHT = 0.4
-TVERSKY_WEIGHT = 0.6
+FOCAL_WEIGHT = 0.5
+TVERSKY_WEIGHT = 0.5
 
-# Tversky setup for high recall (Beta = 0.95)
-TVERSKY_ALPHA = 0.05
-TVERSKY_BETA = 0.95
+# Tversky setup: softer recall bias to prevent "blob" predictions
+TVERSKY_ALPHA = 0.3 
+TVERSKY_BETA = 0.7
 
-FOCAL_GAMMA = 3.0
+FOCAL_GAMMA = 2.0
 
 # Inference thresholds (for hybrid_inference.py)
 CLASS_THRESHOLDS = {1: 0.25} # Aggressive threshold for IRF recall
