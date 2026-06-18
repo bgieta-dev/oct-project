@@ -100,12 +100,16 @@ class TverskyLoss(torch.nn.Module):
             return 1 - tversky[1:].mean()
         return 1 - tversky.mean()
 
-def calculate_dynamic_weights(mask_paths, num_classes):
+def calculate_dynamic_weights(mask_paths, num_classes, target_class=None):
     logging.info("Calculating dynamic class weights...")
     counts = np.zeros(num_classes)
     from PIL import Image
     for p in tqdm(mask_paths, desc="Scanning masks"):
         m = np.array(Image.open(p))
+        if target_class is not None:
+            binary_m = np.zeros_like(m)
+            binary_m[m == target_class] = 1
+            m = binary_m
         counts += np.bincount(m.ravel(), minlength=num_classes)
     
     weights = 1.0 / (counts + 1.0) 
