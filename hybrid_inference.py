@@ -7,8 +7,10 @@ import config_irf_expert as expert_config
 import torch.nn.functional as F
 
 class HybridInference:
-    def __init__(self, base_model_path, expert_model_path):
+    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4):
         self.device = config.DEVICE
+        self.ensemble_mode = ensemble_mode
+        self.expert_weight = expert_weight
         
         # 1. Load Base Model (mit-b2, multi-class)
         self.base_model = SegformerForSemanticSegmentation.from_pretrained(
@@ -26,6 +28,42 @@ class HybridInference:
         
         self.processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
 
+    def _predict_logits(self, model, processor, image, cfg):
+        inputs = processor(images=image, return_tensors="pt").to(self.device)
+        pixel_values = inputs.pixel_values
+        target_size = image.shape[:2]
+        
+        if getattr(cfg, "USE_TTA", False):
+            scales = getattr(cfg, "TTA_SCALES", [1.0])
+            all_logits = []
+            for s in scales:
+                if s != 1.0:
+                    scaled_size = (int(cfg.AUG_SIZE[0] * s), int(cfg.AUG_SIZE[1] * s))
+                    scaled_pixels = torch.nn.functional.interpolate(
+                        pixel_values, size=scaled_size, mode="bilinear", align_corners=False
+                    )
+                else:
+                    scaled_pixels = pixel_values
+                
+                s_outputs = model(pixel_values=scaled_pixels)
+                s_logits = torch.nn.functional.interpolate(
+                    s_outputs.logits, size=target_size, mode="bilinear", align_corners=False
+                )
+                all_logits.append(s_logits)
+                
+                f_pixels = torch.flip(scaled_pixels, [3])
+                f_outputs = model(pixel_values=f_pixels)
+                f_logits = torch.nn.functional.interpolate(
+                    f_outputs.logits, size=target_size, mode="bilinear", align_corners=False
+                )
+                uf_logits = torch.flip(f_logits, [3])
+                all_logits.append(uf_logits)
+            
+            return torch.mean(torch.stack(all_logits), dim=0)
+        else:
+            out = model(pixel_values=pixel_values).logits
+            return torch.nn.functional.interpolate(out, size=target_size, mode="bilinear", align_corners=False)
+
     @torch.no_grad()
     def segment(self, image_np):
         """
@@ -33,45 +71,80 @@ class HybridInference:
         Output: Merged Mask [H, W] (0=BG, 1=IRF, 2=SRF, 3=PED)
         """
         # --- PASS 1: BASE MODEL ---
-        inputs_base = self.processor(images=image_np, return_tensors="pt").to(self.device)
-        base_out = self.base_model(**inputs_base).logits
-        base_logits = F.interpolate(base_out, size=image_np.shape[:2], mode="bilinear", align_corners=False)
+        base_logits = self._predict_logits(self.base_model, self.processor, image_np, config)
         base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
-        base_mask = np.argmax(base_probs, axis=0).astype(np.uint8)
         
         # --- PASS 2: EXPERT MODEL (Pure 2D) ---
         # Extract middle slice (S_n) from 2.5D context and replicate to 3 channels for processor
         image_2d = image_np[:, :, 1] if len(image_np.shape) == 3 else image_np
         image_2d_rgb = np.stack([image_2d, image_2d, image_2d], axis=-1)
         
-        inputs_expert = self.processor(images=image_2d_rgb, return_tensors="pt").to(self.device)
-        expert_out = self.expert_model(**inputs_expert).logits
-        expert_logits = F.interpolate(expert_out, size=image_np.shape[:2], mode="bilinear", align_corners=False)
+        expert_logits = self._predict_logits(self.expert_model, self.processor, image_2d_rgb, expert_config)
         expert_probs = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()
         expert_irf_prob = expert_probs[1] # Probability of IRF
         
         # --- ENSEMBLE MERGING LOGIC ---
-        final_mask = base_mask.copy()
+        target_classes = list(range(1, config.NUM_LABELS))
         
-        # Threshold for Expert IRF (aggressive)
-        irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.25})[1]
-        expert_irf_mask = (expert_irf_prob > irf_threshold)
-        
-        # Conflict Resolution: Vectorized
-        # If expert says IRF, it overrides BG (0) and existing Base IRF (1).
-        # It does NOT override SRF (2) / PED (3) to avoid anatomical corruption.
-        final_mask[(final_mask <= 1) & expert_irf_mask] = 1
+        if self.ensemble_mode == "soft":
+            # Probability-level blending for IRF (Class 1)
+            merged_probs = base_probs.copy()
+            merged_probs[1] = (1 - self.expert_weight) * base_probs[1] + self.expert_weight * expert_irf_prob
             
-        # Optional: Clean up tiny noise artifacts
-        if getattr(config, "MIN_REGION_SIZE", 0) > 0:
-            for c in [1, 2, 3]:
-                c_mask = (final_mask == c).astype(np.uint8)
-                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, connectivity=8)
-                for lbl in range(1, num_labels):
-                    if stats[lbl, cv2.CC_STAT_AREA] < config.MIN_REGION_SIZE:
-                        final_mask[labels_im == lbl] = 0
+            # Clinical Sharpening for PED (Class 3)
+            if config.NUM_LABELS > 3:
+                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                sharp_ped = cv2.filter2D(merged_probs[3], -1, sharpen_kernel)
+                merged_probs[3] = np.clip(sharp_ped, 0, 1)
+                
+            # Reverse-Priority Thresholding
+            final_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
+            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes})
+            for c in reversed(target_classes):
+                thresh = thresholds.get(c, 0.5)
+                final_mask[merged_probs[c] > thresh] = c
+                
+        else: # "hard" mask-level merging (original logic, but aligned with eval heuristics)
+            # Base Model prediction with sharpening and thresholding
+            base_probs_copy = base_probs.copy()
+            if config.NUM_LABELS > 3:
+                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                sharp_ped = cv2.filter2D(base_probs_copy[3], -1, sharpen_kernel)
+                base_probs_copy[3] = np.clip(sharp_ped, 0, 1)
+                
+            base_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
+            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes})
+            for c in reversed(target_classes):
+                thresh = thresholds.get(c, 0.5)
+                base_mask[base_probs_copy[c] > thresh] = c
+                
+            # Threshold for Expert IRF (aggressive)
+            irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.25})[1]
+            expert_irf_mask = (expert_irf_prob > irf_threshold)
+            
+            final_mask = base_mask.copy()
+            # If expert says IRF, it overrides BG (0) and existing Base IRF (1).
+            # It does NOT override SRF (2) / PED (3) to avoid anatomical corruption.
+            final_mask[(final_mask <= 1) & expert_irf_mask] = 1
+            
+        # --- CLINICAL POST-PROCESSING HEURISTICS (aligned with eval.py) ---
+        cleaned_mask = np.zeros_like(final_mask)
+        kernel_3x3 = np.ones((3, 3), np.uint8)
+        min_region_size = getattr(config, "MIN_REGION_SIZE", 0)
+        
+        for c in target_classes:
+            c_mask = (final_mask == c).astype(np.uint8)
+            if np.any(c_mask):
+                # Morphological separation for IRF (Class 1) to break thin false-positive bridges
+                if c == 1 and config.NUM_LABELS > 1:
+                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
+                
+                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
+                for label in range(1, num_labels):
+                    if stats[label, cv2.CC_STAT_AREA] >= min_region_size:
+                        cleaned_mask[labels_im == label] = c
                         
-        return final_mask
+        return cleaned_mask
 
 if __name__ == "__main__":
     # Example usage / Test stub
