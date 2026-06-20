@@ -13,21 +13,21 @@ from utils import get_stratified_splits
 from dataset import OCTDataset
 from eval import BoundaryPrecisionAnalyzer
 
-def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4):
+def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None):
     """
     Evaluates the ensemble of Base (mit-b2) and Expert (mit-b0) models.
     Computes class-specific metrics to verify IRF improvement.
     """
     os.makedirs(output_dir, exist_ok=True)
     logging.info(f"--- STARTING HYBRID EVALUATION ---")
-    logging.info(f"Ensemble Mode: {ensemble_mode} | Expert Weight: {expert_weight}")
+    logging.info(f"Ensemble Mode: {ensemble_mode} | Expert Weight: {expert_weight} | Blend Strategy: {blend_strategy} | IRF Threshold: {irf_threshold}")
     
     if not os.path.exists(base_weights) or not os.path.exists(expert_weights):
         logging.error("Missing weight files. Ensure both base and expert models are trained.")
         return
 
     # 1. Initialize Hybrid Engine
-    engine = HybridInference(base_weights, expert_weights, ensemble_mode=ensemble_mode, expert_weight=expert_weight)
+    engine = HybridInference(base_weights, expert_weights, ensemble_mode=ensemble_mode, expert_weight=expert_weight, blend_strategy=blend_strategy, irf_threshold=irf_threshold)
     
     # 2. Setup Test Data
     all_files = sorted(os.listdir(config.IMG_DIR))
@@ -153,6 +153,8 @@ def main():
     parser.add_argument("--output", type=str, default="hybrid_eval_results", help="Output directory")
     parser.add_argument("--ensemble-mode", type=str, default="soft", choices=["soft", "hard"], help="Ensemble mode: soft (probability blend) or hard (mask override)")
     parser.add_argument("--expert-weight", type=float, default=0.4, help="Weight of expert predictions in soft ensemble (0.0 to 1.0)")
+    parser.add_argument("--blend-strategy", type=str, default="linear", choices=["linear", "geometric", "harmonic", "max", "min", "confidence"], help="Blending strategy for soft ensembling")
+    parser.add_argument("--irf-threshold", type=float, default=None, help="Custom decision threshold for IRF (e.g. 0.20 or 0.15) to control sensitivity/recall")
     args = parser.parse_args()
     
     evaluate_hybrid(
@@ -160,7 +162,9 @@ def main():
         expert_weights=args.expert_weights,
         output_dir=args.output,
         ensemble_mode=args.ensemble_mode,
-        expert_weight=args.expert_weight
+        expert_weight=args.expert_weight,
+        blend_strategy=args.blend_strategy,
+        irf_threshold=args.irf_threshold
     )
 
 if __name__ == "__main__":

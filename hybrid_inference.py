@@ -7,10 +7,12 @@ import config_irf_expert as expert_config
 import torch.nn.functional as F
 
 class HybridInference:
-    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4):
+    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None):
         self.device = config.DEVICE
         self.ensemble_mode = ensemble_mode
         self.expert_weight = expert_weight
+        self.blend_strategy = blend_strategy
+        self.irf_threshold = irf_threshold
         
         # 1. Load Base Model (mit-b2, multi-class)
         self.base_model = SegformerForSemanticSegmentation.from_pretrained(
@@ -89,7 +91,26 @@ class HybridInference:
         if self.ensemble_mode == "soft":
             # Probability-level blending for IRF (Class 1)
             merged_probs = base_probs.copy()
-            merged_probs[1] = (1 - self.expert_weight) * base_probs[1] + self.expert_weight * expert_irf_prob
+            
+            P_base = base_probs[1]
+            P_expert = expert_irf_prob
+            w = self.expert_weight
+            
+            if self.blend_strategy == "linear":
+                merged_probs[1] = (1 - w) * P_base + w * P_expert
+            elif self.blend_strategy == "geometric":
+                merged_probs[1] = np.clip((P_base ** (1 - w)) * (P_expert ** w), 0, 1)
+            elif self.blend_strategy == "harmonic":
+                merged_probs[1] = np.clip(1.0 / ((1 - w) / (P_base + 1e-8) + w / (P_expert + 1e-8) + 1e-8), 0, 1)
+            elif self.blend_strategy == "max":
+                merged_probs[1] = np.maximum(P_base, P_expert)
+            elif self.blend_strategy == "min":
+                merged_probs[1] = np.minimum(P_base, P_expert)
+            elif self.blend_strategy == "confidence":
+                # Only blend in the uncertain region of the base model
+                uncertain_mask = (P_base > 0.15) & (P_base < 0.45)
+                blend_val = (1 - w) * P_base + w * P_expert
+                merged_probs[1] = np.where(uncertain_mask, blend_val, P_base)
             
             # Clinical Sharpening for PED (Class 3)
             if config.NUM_LABELS > 3:
@@ -99,7 +120,10 @@ class HybridInference:
                 
             # Reverse-Priority Thresholding
             final_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes})
+            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
+            if self.irf_threshold is not None:
+                thresholds[1] = self.irf_threshold
+                
             for c in reversed(target_classes):
                 thresh = thresholds.get(c, 0.5)
                 final_mask[merged_probs[c] > thresh] = c
@@ -113,7 +137,10 @@ class HybridInference:
                 base_probs_copy[3] = np.clip(sharp_ped, 0, 1)
                 
             base_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes})
+            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
+            if self.irf_threshold is not None:
+                thresholds[1] = self.irf_threshold
+                
             for c in reversed(target_classes):
                 thresh = thresholds.get(c, 0.5)
                 base_mask[base_probs_copy[c] > thresh] = c
