@@ -12,22 +12,34 @@ import config
 from utils import get_stratified_splits
 from dataset import OCTDataset
 from eval import BoundaryPrecisionAnalyzer
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
-def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None, irf_min_region_size=20):
+def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=0.18, irf_min_region_size=15, irf_override=False):
     """
     Evaluates the ensemble of Base (mit-b2) and Expert (mit-b0) models.
     Computes class-specific metrics to verify IRF improvement.
     """
     os.makedirs(output_dir, exist_ok=True)
     logging.info(f"--- STARTING HYBRID EVALUATION ---")
-    logging.info(f"Ensemble Mode: {ensemble_mode} | Expert Weight: {expert_weight} | Blend Strategy: {blend_strategy} | IRF Threshold: {irf_threshold} | IRF Min Region Size: {irf_min_region_size}")
+    logging.info(f"Ensemble Mode: {ensemble_mode} | Expert Weight: {expert_weight} | Blend Strategy: {blend_strategy} | IRF Threshold: {irf_threshold} | IRF Min Region Size: {irf_min_region_size} | IRF Override: {irf_override}")
     
     if not os.path.exists(base_weights) or not os.path.exists(expert_weights):
         logging.error("Missing weight files. Ensure both base and expert models are trained.")
         return
 
     # 1. Initialize Hybrid Engine
-    engine = HybridInference(base_weights, expert_weights, ensemble_mode=ensemble_mode, expert_weight=expert_weight, blend_strategy=blend_strategy, irf_threshold=irf_threshold, irf_min_region_size=irf_min_region_size)
+    engine = HybridInference(
+        base_weights, 
+        expert_weights, 
+        ensemble_mode=ensemble_mode, 
+        expert_weight=expert_weight, 
+        blend_strategy=blend_strategy, 
+        irf_threshold=irf_threshold, 
+        irf_min_region_size=irf_min_region_size,
+        irf_override=irf_override
+    )
     
     # 2. Setup Test Data
     all_files = sorted(os.listdir(config.IMG_DIR))
@@ -54,6 +66,20 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
     
     logging.info(f"Testing on {len(ds)} images from {len(test_patients)} patients using OCTDataset workflow.")
 
+    # [REPLICATION] Scan raw masks for vis indices (Dynamically sized to target classes)
+    logging.info("Scanning raw masks for visualization slice selection...")
+    target_classes = list(range(1, config.NUM_LABELS))
+    class_max_counts = {c: 0 for c in target_classes}
+    vis_indices = {c: -1 for c in target_classes}
+    for i, m_path in enumerate(test_masks):
+        m = np.array(Image.open(m_path))
+        for c in target_classes:
+            cnt = np.sum(m == c)
+            if cnt > class_max_counts[c]:
+                class_max_counts[c] = cnt
+                vis_indices[c] = i
+    logging.info(f"Dynamic vis indices: {vis_indices}")
+
     # 4. Metrics Accumulators
     num_classes = config.NUM_LABELS
     total_cm = np.zeros((num_classes, num_classes), dtype=np.int64)
@@ -63,6 +89,7 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
     class_regions_pred = {c: [] for c in range(1, num_classes)}
     class_boundary_diffs = {c: [] for c in range(1, num_classes)}
     class_pixel_areas_gt = {c: [] for c in range(1, num_classes)}
+    vis_data = {}
 
     # 5. Evaluation Loop
     for idx in tqdm(range(len(ds)), desc="Evaluating Hybrid"):
@@ -70,8 +97,8 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
         image_np = batch["orig_img"] # Contains proper 2.5D context [H, W, 3] or Multimodal
         gt_mask = batch["labels"].numpy().astype(np.uint8)
         
-        # Predict using Hybrid Engine
-        pred_mask = engine.segment(image_np)
+        # Predict using Hybrid Engine (extracting mask and base attention map)
+        pred_mask, att_map = engine.segment_with_attention(image_np)
         
         # Update Confusion Matrix
         mask_valid = (gt_mask >= 0) & (gt_mask < num_classes)
@@ -97,11 +124,56 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
                 class_hd95[c].append(hd95(pred_c, gt_c))
                 class_asd[c].append(asd(pred_c, gt_c))
         
-        # Optional: Save visual comparison for first 10 images
-        if idx < 10:
-            save_viz(image_np[:, :, 1] if len(image_np.shape) == 3 else image_np, gt_mask, pred_mask, os.path.join(output_dir, f"viz_{idx}.png"))
+        # Collect visualization data for predictions.png
+        for c_key, t_idx in vis_indices.items():
+            if idx == t_idx and t_idx != -1:
+                vis_data[c_key] = (image_np, gt_mask, pred_mask, att_map)
 
-    # 6. Final Metrics Calculation
+    # 6. Grid Visualization Generator (replicating eval.py predictions.png)
+    logging.info("Generating predictions.png...")
+    num_plots = len(vis_data)
+    if num_plots > 0:
+        plt.figure(figsize=(22, 5 * num_plots))
+        sorted_c_ids = [c for c in target_classes if c in vis_data]
+        for i, c_id in enumerate(sorted_c_ids):
+            img, gt, prd, att = vis_data[c_id]
+            
+            ax1 = plt.subplot(num_plots, 4, i*4+1)
+            ax1.imshow(img) 
+            ax1.set_title(f"OCT: {config.CLASS_NAMES.get(c_id, f'Class {c_id}')}", fontsize=14, fontweight='bold')
+            ax1.axis("off")
+            
+            ax2 = plt.subplot(num_plots, 4, i*4+2)
+            ax2.imshow(gt, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1)
+            ax2.set_title(f"GT (px: {class_max_counts[c_id]})", fontsize=12)
+            ax2.axis("off")
+            
+            tp = np.sum((gt == c_id) & (prd == c_id))
+            fp = np.sum((gt != c_id) & (prd == c_id))
+            fn = np.sum((gt == c_id) & (prd != c_id))
+            c_iou = tp / (tp + fp + fn + 1e-6)
+            
+            ax3 = plt.subplot(num_plots, 4, i*4+3)
+            ax3.imshow(prd, cmap="jet", vmin=0, vmax=config.NUM_LABELS-1)
+            ax3.set_title(f"Prediction (IoU: {c_iou:.2f})", fontsize=12)
+            ax3.axis("off")
+            
+            ax4 = plt.subplot(num_plots, 4, i*4+4)
+            att_resized = cv2.resize(att, (img.shape[1], img.shape[0]))
+            att_norm = (att_resized - att_resized.min()) / (att_resized.max() - att_resized.min() + 1e-8)
+            att_norm = np.power(att_norm, getattr(config, "ATTENTION_CONTRAST", 0.6))
+            
+            gray_bg = img[:, :, 1] if img.ndim == 3 else img
+            ax4.imshow(gray_bg, cmap="gray")
+            ax4.imshow(att_norm, cmap="jet", alpha=0.5)
+            ax4.set_title("Self-Attention (Stage 2)", fontsize=12)
+            ax4.axis("off")
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "predictions.png"), dpi=200, bbox_inches='tight')
+        plt.close()
+
+    # 7. Final Metrics Calculation
     ious = np.diag(total_cm) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) - np.diag(total_cm) + 1e-6)
     dices = (2 * np.diag(total_cm)) / (total_cm.sum(axis=0) + total_cm.sum(axis=1) + 1e-6)
     
@@ -130,21 +202,6 @@ def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_be
     
     return ious
 
-def save_viz(img, gt, pred, path):
-    """Helper to save a side-by-side comparison"""
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    axes[0].imshow(img)
-    axes[0].set_title("OCT Image")
-    axes[1].imshow(gt, cmap='nipy_spectral', vmin=0, vmax=3)
-    axes[1].set_title("Ground Truth")
-    axes[2].imshow(pred, cmap='nipy_spectral', vmin=0, vmax=3)
-    axes[2].set_title("Hybrid Prediction")
-    for ax in axes: ax.axis('off')
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close()
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Clinical Hybrid Ensemble Evaluation Pipeline")
@@ -154,8 +211,9 @@ def main():
     parser.add_argument("--ensemble-mode", type=str, default="soft", choices=["soft", "hard"], help="Ensemble mode: soft (probability blend) or hard (mask override)")
     parser.add_argument("--expert-weight", type=float, default=0.4, help="Weight of expert predictions in soft ensemble (0.0 to 1.0)")
     parser.add_argument("--blend-strategy", type=str, default="linear", choices=["linear", "geometric", "harmonic", "max", "min", "confidence"], help="Blending strategy for soft ensembling")
-    parser.add_argument("--irf-threshold", type=float, default=None, help="Custom decision threshold for IRF (e.g. 0.20 or 0.15) to control sensitivity/recall")
-    parser.add_argument("--irf-min-region-size", type=int, default=20, help="Minimum region size for IRF cysts (default: 20) to preserve small detections")
+    parser.add_argument("--irf-threshold", type=float, default=0.18, help="Custom decision threshold for IRF (default: 0.18) to control sensitivity/recall")
+    parser.add_argument("--irf-min-region-size", type=int, default=15, help="Minimum region size for IRF cysts (default: 15) to preserve small detections")
+    parser.add_argument("--irf-override", action="store_true", help="Allow IRF to override/fragment SRF and PED (not recommended due to fragmentation)")
     args = parser.parse_args()
     
     evaluate_hybrid(
@@ -166,7 +224,8 @@ def main():
         expert_weight=args.expert_weight,
         blend_strategy=args.blend_strategy,
         irf_threshold=args.irf_threshold,
-        irf_min_region_size=args.irf_min_region_size
+        irf_min_region_size=args.irf_min_region_size,
+        irf_override=args.irf_override
     )
 
 if __name__ == "__main__":
