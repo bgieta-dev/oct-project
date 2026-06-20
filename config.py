@@ -65,8 +65,8 @@ ATTENTION_CONTRAST = 0.6
 # Centralized thresholds with an explicit fallback convention.
 CLASS_THRESHOLDS = {
     1: 0.30, # IRF is dangerous to miss, triggers at 30% confidence
-    2: 0.50, # SRF 
-    3: 0.50  # PED 
+    2: 0.60, # SRF 
+    3: 0.60  # PED 
 }
 
 # --- DATA AUGMENTATION SETTINGS ---
