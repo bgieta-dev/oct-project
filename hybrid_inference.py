@@ -205,8 +205,8 @@ class HybridInference:
         # Run 1.0 scale forward pass to extract attention map
         base_outputs = self.base_model(pixel_values=pixel_values, output_attentions=True)
         
-        # Extract Stage 2 attention (64x64 resolution)
-        att_stage = base_outputs.attentions[1]
+        # Extract Stage 6 attention for visualization
+        att_stage = base_outputs.attentions[5]
         avg_att = torch.mean(att_stage, dim=1)
         spatial_att = torch.mean(avg_att, dim=1)
         grid_size = int(np.sqrt(spatial_att.shape[1]))

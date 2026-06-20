@@ -52,7 +52,7 @@ TVERSKY_ALPHA = 0.1
 TVERSKY_BETA = 0.9 
 
 # --- EVALUATION, POST-PROCESSING & POST-PROCESSING HYPERPARAMETERS ---
-MIN_REGION_SIZE = 50 
+MIN_REGION_SIZE = 80 
 USE_TTA = True 
 TTA_SCALES = [0.8, 1.0, 1.2] 
 USE_SOFT_CRF = False # Disabled due to pydensecrf compilation issues on py3.13
@@ -65,8 +65,8 @@ ATTENTION_CONTRAST = 0.6
 # Centralized thresholds with an explicit fallback convention.
 CLASS_THRESHOLDS = {
     1: 0.30, # IRF is dangerous to miss, triggers at 30% confidence
-    2: 0.60, # SRF 
-    3: 0.60  # PED 
+    2: 0.80, # SRF 
+    3: 0.80  # PED 
 }
 
 # --- DATA AUGMENTATION SETTINGS ---

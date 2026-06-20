@@ -121,8 +121,8 @@ def evaluate_model(model_path="best_model.pth", output_dir=".", cfg=global_confi
             outputs = model(pixel_values=pixel_values)
             logits = torch.nn.functional.interpolate(outputs.logits, size=cfg.AUG_SIZE, mode="bilinear", align_corners=False)
             
-            # Extract Stage 2 attention (64x64 resolution) for rich context visualization
-            att_stage = outputs.attentions[1] 
+            # Extract Stage 6 attention for rich context visualization
+            att_stage = outputs.attentions[5] 
             avg_att = torch.mean(att_stage, dim=1) 
             spatial_att = torch.mean(avg_att, dim=1) 
             grid_size = int(np.sqrt(spatial_att.shape[1]))
