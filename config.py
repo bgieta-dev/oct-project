@@ -109,3 +109,8 @@ def get_vram_config(model_name: str):
 VRAM = get_vram_config(MODEL_NAME)
 BATCH_SIZE = VRAM["batch_size"]
 ACCUMULATION_STEPS = VRAM["accum_steps"]
+
+# --- HYBRID ENSEMBLE CONFIGURATION ---
+HYBRID_ENSEMBLE_MODE = "soft"
+HYBRID_IRF_THRESHOLD = 0.25
+HYBRID_IRF_MIN_REGION_SIZE = 12

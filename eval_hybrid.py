@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=0.18, irf_min_region_size=15, irf_override=False):
+def evaluate_hybrid(base_weights="best_model.pth", expert_weights="irf_expert_best.pth", output_dir="hybrid_eval_results", ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=0.25, irf_min_region_size=12, irf_override=False):
     """
     Evaluates the ensemble of Base (mit-b2) and Expert (mit-b0) models.
     Computes class-specific metrics to verify IRF improvement.
@@ -211,8 +211,8 @@ def main():
     parser.add_argument("--ensemble-mode", type=str, default="soft", choices=["soft", "hard"], help="Ensemble mode: soft (probability blend) or hard (mask override)")
     parser.add_argument("--expert-weight", type=float, default=0.4, help="Weight of expert predictions in soft ensemble (0.0 to 1.0)")
     parser.add_argument("--blend-strategy", type=str, default="linear", choices=["linear", "geometric", "harmonic", "max", "min", "confidence"], help="Blending strategy for soft ensembling")
-    parser.add_argument("--irf-threshold", type=float, default=0.18, help="Custom decision threshold for IRF (default: 0.18) to control sensitivity/recall")
-    parser.add_argument("--irf-min-region-size", type=int, default=15, help="Minimum region size for IRF cysts (default: 15) to preserve small detections")
+    parser.add_argument("--irf-threshold", type=float, default=0.25, help="Custom decision threshold for IRF (default: 0.25) to control sensitivity/recall")
+    parser.add_argument("--irf-min-region-size", type=int, default=12, help="Minimum region size for IRF cysts (default: 12) to preserve small detections")
     parser.add_argument("--irf-override", action="store_true", help="Allow IRF to override/fragment SRF and PED (not recommended due to fragmentation)")
     args = parser.parse_args()
     

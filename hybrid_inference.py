@@ -197,18 +197,58 @@ class HybridInference:
         Input: Raw 2.5D/Multimodal image [H, W, 3] from OCTDataset
         Output: (merged_mask [H, W], attention_map [64, 64])
         """
-        # --- PASS 1: BASE MODEL ---
+        # --- PASS 1: BASE MODEL (with TTA and Attention extraction) ---
         inputs_base = self.processor(images=image_np, return_tensors="pt").to(self.device)
-        base_outputs = self.base_model(pixel_values=inputs_base.pixel_values, output_attentions=True)
-        base_logits = F.interpolate(base_outputs.logits, size=image_np.shape[:2], mode="bilinear", align_corners=False)
-        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
+        pixel_values = inputs_base.pixel_values
+        target_size = image_np.shape[:2]
         
-        # Extract Stage 2 attention (64x64 resolution) for visualization
+        # Run 1.0 scale forward pass to extract attention map
+        base_outputs = self.base_model(pixel_values=pixel_values, output_attentions=True)
+        
+        # Extract Stage 2 attention (64x64 resolution)
         att_stage = base_outputs.attentions[1]
         avg_att = torch.mean(att_stage, dim=1)
         spatial_att = torch.mean(avg_att, dim=1)
         grid_size = int(np.sqrt(spatial_att.shape[1]))
         att_map = spatial_att.view(-1, grid_size, grid_size).squeeze(0).cpu().numpy()
+        
+        if getattr(config, "USE_TTA", False):
+            scales = getattr(config, "TTA_SCALES", [1.0])
+            all_logits = []
+            for s in scales:
+                if s != 1.0:
+                    scaled_size = (int(config.AUG_SIZE[0] * s), int(config.AUG_SIZE[1] * s))
+                    scaled_pixels = torch.nn.functional.interpolate(
+                        pixel_values, size=scaled_size, mode="bilinear", align_corners=False
+                    )
+                    s_outputs = self.base_model(pixel_values=scaled_pixels)
+                    s_logits = torch.nn.functional.interpolate(
+                        s_outputs.logits, size=target_size, mode="bilinear", align_corners=False
+                    )
+                else:
+                    s_logits = torch.nn.functional.interpolate(
+                        base_outputs.logits, size=target_size, mode="bilinear", align_corners=False
+                    )
+                all_logits.append(s_logits)
+                
+                # Flip augmentation
+                if s != 1.0:
+                    f_pixels = torch.flip(scaled_pixels, [3])
+                else:
+                    f_pixels = torch.flip(pixel_values, [3])
+                    
+                f_outputs = self.base_model(pixel_values=f_pixels)
+                f_logits = torch.nn.functional.interpolate(
+                    f_outputs.logits, size=target_size, mode="bilinear", align_corners=False
+                )
+                uf_logits = torch.flip(f_logits, [3])
+                all_logits.append(uf_logits)
+                
+            base_logits = torch.mean(torch.stack(all_logits), dim=0)
+        else:
+            base_logits = torch.nn.functional.interpolate(base_outputs.logits, size=target_size, mode="bilinear", align_corners=False)
+            
+        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
         
         # --- PASS 2: EXPERT MODEL (Pure 2D) ---
         image_2d = image_np[:, :, 1] if len(image_np.shape) == 3 else image_np

@@ -1,8 +1,15 @@
 # Changelog
 
-All notable changes to the OCT Segmentation project will be documented in this file.
+## [1.1.1] - 2026-06-20
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+### Added
+- **Unified Post-Processing & Heuristics Parity**: Added full Test-Time Augmentation (TTA), clinical sharpening for PED (Class 3), reverse-priority thresholding, and morphological post-processing (opening and size filtering) to `hybrid_inference.py` to match the baseline `eval.py` pipeline.
+- **Soft Probability-Level Ensembling**: Added support for soft-blending base and expert softmax probabilities before thresholding, with multiple blending strategies (`linear`, `geometric`, `harmonic`, `max`, `min`, `confidence`).
+- **Class-Specific Minimum Region Sizes**: Added support for class-specific minimum region sizes, allowing tiny intraretinal fluid (IRF) cysts (defaulting to 12 pixels) to be preserved while keeping a higher noise filter (50 pixels) for SRF and PED.
+- **Anatomical Layer Protection (`irf_override`)**: Added an override flag (defaulting to `False`) to prevent IRF predictions from overriding and segmenting/fragmenting subretinal fluid (SRF) and pigment epithelial detachment (PED) boundaries.
+- **Dynamic Slice Selection and Predictions Grid**: Automated dynamic slice scanning and generation of a 4-column visual prediction comparison grid (`predictions.png`) inside `eval_hybrid.py` to mirror the layout of `eval.py`.
+- **Runtime Argument Parsing**: Equipped `eval_hybrid.py` with runtime configuration flags (`--irf-threshold`, `--irf-min-region-size`, `--ensemble-mode`, `--expert-weight`, `--blend-strategy`, and `--irf-override`) for direct server-side tuning.
+- **Centralized Hybrid Configurations**: Centralized optimal parameters (`HYBRID_ENSEMBLE_MODE = "soft"`, `HYBRID_IRF_THRESHOLD = 0.25`, and `HYBRID_IRF_MIN_REGION_SIZE = 12`) in `config.py`.
 
 ## [1.1.0] - 2026-06-18
 
