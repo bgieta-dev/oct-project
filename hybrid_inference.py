@@ -7,12 +7,13 @@ import config_irf_expert as expert_config
 import torch.nn.functional as F
 
 class HybridInference:
-    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None):
+    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None, irf_min_region_size=20):
         self.device = config.DEVICE
         self.ensemble_mode = ensemble_mode
         self.expert_weight = expert_weight
         self.blend_strategy = blend_strategy
         self.irf_threshold = irf_threshold
+        self.irf_min_region_size = irf_min_region_size
         
         # 1. Load Base Model (mit-b2, multi-class)
         self.base_model = SegformerForSemanticSegmentation.from_pretrained(
@@ -157,7 +158,13 @@ class HybridInference:
         # --- CLINICAL POST-PROCESSING HEURISTICS (aligned with eval.py) ---
         cleaned_mask = np.zeros_like(final_mask)
         kernel_3x3 = np.ones((3, 3), np.uint8)
-        min_region_size = getattr(config, "MIN_REGION_SIZE", 0)
+        
+        # Use class-specific min region sizes to avoid discarding small expert IRF detections
+        min_region_sizes = {
+            1: self.irf_min_region_size if self.irf_min_region_size is not None else getattr(config, "MIN_REGION_SIZE", 50),
+            2: getattr(config, "MIN_REGION_SIZE", 50),
+            3: getattr(config, "MIN_REGION_SIZE", 50)
+        }
         
         for c in target_classes:
             c_mask = (final_mask == c).astype(np.uint8)
@@ -168,7 +175,7 @@ class HybridInference:
                 
                 num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
                 for label in range(1, num_labels):
-                    if stats[label, cv2.CC_STAT_AREA] >= min_region_size:
+                    if stats[label, cv2.CC_STAT_AREA] >= min_region_sizes[c]:
                         cleaned_mask[labels_im == label] = c
                         
         return cleaned_mask
