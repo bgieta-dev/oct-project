@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.0.0] - 2026-10-01 — project reorganisation (see ORGANIZATION_PLAN.md)
+
+### Changed (layout; tag `pre-reorg` marks the old layout)
+- All code moved into the `octseg/` package; run modules with `python -m octseg.<module>`.
+  Renames: `eval.py` -> `evaluate.py`, `eval_hybrid.py` -> `evaluate_hybrid.py`, `main.py` -> `pipeline.py`, `utils.py` -> `splits.py`.
+- `run.sh`/`run.bat` -> `scripts/` (now `python -m octseg.pipeline "$@"`); `test_patients.txt` -> `splits/`, together with the new frozen `train_patients.txt` / `val_patients.txt` (seed-42 split; all code reads them instead of recomputing).
+- Root leftovers `predictions.png`, `failures/` -> `experiments/legacy_root/`. Plan/summary docs -> `docs/archive/`, `changelog.md` -> `CHANGELOG.md`, thesis `dokumentacja/` -> `docs/thesis/` (sources now tracked; build products, `OCT.pdf`, `CNN/` ignored), `_help_data/` -> `analysis/external_roche/` (ignored).
+- Outputs go to `outputs/{runs,eval,hybrid_eval,attention}/` (gitignored) instead of the repo root / `experiments/run_*`; the root `best_model.pth` / `irf_expert_best.pth` files are gone, checkpoints live in the run directory.
+- Run snapshot is now `src/` (package copy) + `requirements.txt` + `splits/` + `config.yaml` + `git.txt` instead of copying all root files.
+- `requirements.txt` pinned to the versions used on the dev host (torch per platform); `requirements-dev.txt`, `pyproject.toml` (ruff/pytest config), `.env.example` added; `update_git.sh` removed (`git add .` could commit outputs).
+
+### Added
+- `configs/{base,irf_expert,hybrid}.yaml` + `octseg.config.Config` dataclass / `load_config`; unknown keys fail loudly; no import-time side effects; `DEVICE`, data paths resolved at runtime (`OCT_DATA_DIR` overrides the data folder).
+- Shared modules replacing duplicated code: `losses.py`, `metrics.py` (`SegmentationMetrics` with explicit `hd95_missing` policy), `postprocess.py` (TTA, PED sharpening, thresholds, region cleanup), `viz.py`, `runs.py`, `model.py` (strict checkpoint loading).
+- CLIs: every module takes `--config`; `pipeline`/`train_expert`/`train` take `--name`, `--epochs`, `--output`. `metrics.yaml` is written in every run/eval directory.
+- `tests/` (config, splits, dataset, losses, metrics, postprocess).
+
+### Fixed
+- **IRF expert config (B1/B2):** `train_model` now passes `cfg` to `OCTDataset`, so expert settings (`USE_25D`, `TARGET_CLASS`) are honoured; expert batch size derives from its backbone. Expert input decided as 2.5D and the hybrid feeds both models the same image (previously the expert got the middle slice replicated x3).
+- Missing or mismatching checkpoints raise (`strict=True`, `weights_only=True`) instead of evaluating an untrained model (B4); `evaluate` logs INFO again in standalone mode (B5); eval/hybrid output dirs are gitignored (B6).
+- `HybridInference`: `segment` and `segment_with_attention` merged into `segment(image, return_attention=False)`; defaults come from `HYBRID_*` only (the divergent `min_region_size` fallbacks are gone).
+- Reproducibility: `seed_everything(SEED)`, seeded `DataLoader` generator/workers.
+
+### Changed (behavior-neutral)
+- Training step no longer passes `labels=` to the HF model (it computed an unused internal CE loss).
+- `predictions.png` saved at dpi 120 (was 200); the attention column is titled "encoder block 5" and new attention files are named `..._block{i}.png` (were `..._stage{i}.png`; same index).
+- Removed dead keys (`OPTIMIZER_TYPE`, `USE_SOFT_CRF`, `CRF_ITERATIONS`, `USE_FOCAL_TVERSKY`) and the SwinUNETR/monai branch.
+- Verified numerically against tag `pre-reorg`: split hash, dataset item, loss values, TTA logits, threshold/cleanup masks and all hybrid merge modes are identical.
+
+### Docs
+- README rewritten; `docs/METHODS.md` (merged and corrected `Dokumentacja.md` + `summary.md`), `docs/EXPERIMENTS.md`, `docs/ROADMAP.md` added.
+
 ## [1.1.1] - 2026-06-20
 
 ### Added
