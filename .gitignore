@@ -273,8 +273,29 @@ settings.local.py
 
 data_folder
 eval_results.png
-_help_data
 
-/dokumentacja
 
 .claude
+# project outputs
+/outputs/
+/eval_results_*/
+/hybrid_eval_results/
+/attention_results/
+.codegraph/
+# thesis build products (after Step 5)
+docs/thesis/*.aux
+docs/thesis/*.bbl
+docs/thesis/*.blg
+docs/thesis/*.fdb_latexmk
+docs/thesis/*.fls
+docs/thesis/*.lof
+docs/thesis/*.lot
+docs/thesis/*.log
+docs/thesis/*.out
+docs/thesis/*.toc
+docs/thesis/*.synctex.gz
+docs/thesis/OCT.pdf
+docs/thesis/CNN/
+docs/thesis/TRANSFORMERS/
+/analysis/external_roche/
+docs/thesis/*.pdf

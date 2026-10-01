@@ -1,14 +1,15 @@
-numpy
-Pillow
-transformers
-albumentations
-scikit-learn
-matplotlib
-tqdm
-medpy
-SimpleITK
-scipy
-python-dotenv
-monai
-einops
-opencv-python-headless
+# torch must be installed per platform (this host: 2.11.0+rocm7.2; lab machine: CUDA build).
+# See https://pytorch.org/get-started/locally/
+torch==2.11.0
+transformers==5.7.0
+albumentations==2.0.8
+numpy==2.4.3
+scikit-learn==1.6.1
+scipy==1.17.1
+medpy==0.5.2
+opencv-python-headless==4.13.0.92
+pillow==12.1.1
+matplotlib==3.10.9
+tqdm==4.67.3
+python-dotenv==1.2.2
+requests==2.33.1

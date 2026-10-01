@@ -1,0 +1,5 @@
+[tool.ruff]
+extend-exclude = ["experiments", "docs/thesis", "analysis", "venv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
