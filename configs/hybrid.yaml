@@ -1,0 +1,8 @@
+# Base model config + hybrid-ensemble defaults for octseg.evaluate_hybrid.
+base: base.yaml
+HYBRID_ENSEMBLE_MODE: soft
+HYBRID_EXPERT_WEIGHT: 0.4
+HYBRID_BLEND_STRATEGY: linear
+HYBRID_IRF_THRESHOLD: 0.25
+HYBRID_IRF_MIN_REGION_SIZE: 12
+HYBRID_IRF_OVERRIDE: false

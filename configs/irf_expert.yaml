@@ -1,0 +1,18 @@
+# Binary IRF expert (replaces config_irf_expert.py).
+# Input representation: 2.5D (t-1, t, t+1), same as the base model, so the hybrid feeds both the same image
+# (decision recorded in docs/ROADMAP.md; the old config said "2D" but trained on 2.5D because of bug B1).
+base: base.yaml
+MODEL_NAME: nvidia/mit-b0   # lightweight expert; BATCH_SIZE/ACCUMULATION_STEPS derive from this
+NUM_LABELS: 2               # background vs IRF
+TARGET_CLASS: 1
+USE_25D: true
+USE_DYNAMIC_WEIGHTS: false
+LR: 5.0e-05
+EPOCHS: 60
+CLASS_WEIGHTS: [1.0, 8.0]
+FOCAL_WEIGHT: 0.5
+TVERSKY_WEIGHT: 0.5
+TVERSKY_ALPHA: 0.3          # softer recall bias to prevent "blob" predictions
+TVERSKY_BETA: 0.7
+FOCAL_GAMMA: 2.0
+CLASS_THRESHOLDS: {1: 0.25} # aggressive IRF threshold (used by the hybrid "hard" mode)

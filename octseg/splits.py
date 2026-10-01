@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 from typing import Tuple, List
@@ -61,3 +62,29 @@ def get_stratified_splits(all_files: List[str], seed: int = 42) -> Tuple[np.ndar
     )
     
     return train_pts, val_pts, test_pts
+
+def patient_of(filename: str) -> str:
+    """Patient identifier ('{device}_{patient_id}') of a slice filename."""
+    return "_".join(filename.split("_")[:2])
+
+def write_splits(split_dir, train_pts, val_pts, test_pts) -> None:
+    """Writes the three patient lists as one-patient-per-line text files."""
+    split_dir = Path(split_dir)
+    split_dir.mkdir(parents=True, exist_ok=True)
+    for name, pts in (("train", train_pts), ("val", val_pts), ("test", test_pts)):
+        (split_dir / f"{name}_patients.txt").write_text("\n".join(str(p) for p in pts) + "\n")
+
+def load_splits(split_dir) -> Tuple[List[str], List[str], List[str]]:
+    """Reads the frozen train/val/test patient lists written by `write_splits`."""
+    split_dir = Path(split_dir)
+    return tuple(
+        (split_dir / f"{name}_patients.txt").read_text().split()
+        for name in ("train", "val", "test")
+    )
+
+if __name__ == "__main__":
+    # Regenerate the frozen split files from the current data (seed 42). Only needed once.
+    import os
+    from octseg.config import load_config
+    cfg = load_config()
+    write_splits(cfg.SPLIT_DIR, *get_stratified_splits(sorted(os.listdir(cfg.IMG_DIR))))

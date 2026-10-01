@@ -4,13 +4,8 @@ import numpy as np
 import cv2
 from PIL import Image
 from torch.utils.data import Dataset
-from typing import List, Dict, Any, Optional
-import config as global_config
-
-class PicklableConfig:
-    def __init__(self, cfg):
-        self.USE_25D = getattr(cfg, "USE_25D", False)
-        self.AUG_SIZE = getattr(cfg, "AUG_SIZE", None)
+from typing import List, Dict, Any
+from octseg.config import Config
 
 class OCTDataset(Dataset):
     """
@@ -22,18 +17,14 @@ class OCTDataset(Dataset):
         image_paths: List[str], 
         mask_paths: List[str], 
         processor: Any, 
+        cfg: Config,
         transform: Any = None, 
-        use_multimodal: bool = False,
-        target_class: Optional[int] = None,
-        cfg: Any = global_config
     ):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.processor = processor
         self.transform = transform
-        self.use_multimodal = use_multimodal
-        self.target_class = target_class
-        self.cfg = PicklableConfig(cfg)
+        self.cfg = cfg
 
     def __len__(self) -> int:
         return len(self.image_paths)
@@ -70,7 +61,7 @@ class OCTDataset(Dataset):
         skip_final_norm = False
         
         # --- 2.5D LOGIC: VOLUMETRIC CONTEXT ---
-        if getattr(self.cfg, "USE_25D", False):
+        if self.cfg.USE_25D:
             dir_path = os.path.dirname(img_path)
             base_name = os.path.basename(img_path)
             
@@ -96,7 +87,7 @@ class OCTDataset(Dataset):
             image = (image * 255).astype(np.uint8)
             skip_final_norm = True
             
-        elif self.use_multimodal:
+        elif self.cfg.USE_MULTIMODAL:
             # Fallback pathing logic
             denoised_path = img_path.replace("cropped_images", "denoised_images")
             edge_path = img_path.replace("cropped_images", "edge_map_images")
@@ -111,9 +102,9 @@ class OCTDataset(Dataset):
 
         mask = np.array(Image.open(self.mask_paths[idx]))
         
-        if self.target_class is not None:
+        if self.cfg.TARGET_CLASS is not None:
             binary_mask = np.zeros_like(mask)
-            binary_mask[mask == self.target_class] = 1
+            binary_mask[mask == self.cfg.TARGET_CLASS] = 1
             mask = binary_mask
 
         if self.transform:
@@ -125,7 +116,7 @@ class OCTDataset(Dataset):
             image = self._normalize_slice(image.astype(np.float32))
             image = (image * 255).astype(np.uint8)
             
-        aug_size = getattr(self.cfg, "AUG_SIZE", None)
+        aug_size = self.cfg.AUG_SIZE
         if aug_size:
             if image.shape[0] != aug_size[0] or image.shape[1] != aug_size[1]:
                 image = cv2.resize(image, (aug_size[1], aug_size[0]), interpolation=cv2.INTER_LINEAR)

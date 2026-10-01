@@ -1,378 +1,107 @@
-import torch
 import numpy as np
-import cv2
-from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
-import config
-import config_irf_expert as expert_config
+import torch
 import torch.nn.functional as F
+from transformers import SegformerImageProcessor
+
+from octseg.config import Config
+from octseg.model import load_segformer
+from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
+
+BLEND_STRATEGIES = ("linear", "geometric", "harmonic", "max", "min", "confidence")
+
+
+def blend_irf(p_base, p_expert, strategy, w):
+    """Blends base and expert IRF probability maps; `w` is the expert weight."""
+    if strategy == "linear":
+        return (1 - w) * p_base + w * p_expert
+    if strategy == "geometric":
+        return np.clip((p_base ** (1 - w)) * (p_expert ** w), 0, 1)
+    if strategy == "harmonic":
+        return np.clip(1.0 / ((1 - w) / (p_base + 1e-8) + w / (p_expert + 1e-8) + 1e-8), 0, 1)
+    if strategy == "max":
+        return np.maximum(p_base, p_expert)
+    if strategy == "min":
+        return np.minimum(p_base, p_expert)
+    if strategy == "confidence":
+        # Only blend in the uncertain region of the base model
+        uncertain = (p_base > 0.15) & (p_base < 0.45)
+        return np.where(uncertain, (1 - w) * p_base + w * p_expert, p_base)
+    raise ValueError(f"Unknown blend strategy {strategy!r}; expected one of {BLEND_STRATEGIES}")
+
 
 class HybridInference:
-    def __init__(self, base_model_path, expert_model_path, ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear", irf_threshold=None, irf_min_region_size=20, irf_override=False):
-        self.device = config.DEVICE
-        self.ensemble_mode = ensemble_mode
-        self.expert_weight = expert_weight
-        self.blend_strategy = blend_strategy
-        self.irf_threshold = irf_threshold
-        self.irf_min_region_size = irf_min_region_size
-        self.irf_override = irf_override
-        
-        # 1. Load Base Model (mit-b2, multi-class)
-        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-            config.MODEL_NAME, num_labels=config.NUM_LABELS, ignore_mismatched_sizes=True
-        ).to(self.device)
-        self.base_model.load_state_dict(torch.load(base_model_path, map_location=self.device))
-        self.base_model.eval()
-        
-        # 2. Load IRF Expert Model (mit-b0, binary)
-        self.expert_model = SegformerForSemanticSegmentation.from_pretrained(
-            expert_config.MODEL_NAME, num_labels=expert_config.NUM_LABELS, ignore_mismatched_sizes=True
-        ).to(self.device)
-        self.expert_model.load_state_dict(torch.load(expert_model_path, map_location=self.device))
-        self.expert_model.eval()
-        
-        self.processor = SegformerImageProcessor.from_pretrained(config.MODEL_NAME)
+    """Multi-class base SegFormer + binary IRF expert, merged at probability ("soft") or mask ("hard") level.
 
-    def _predict_logits(self, model, processor, image, cfg):
-        inputs = processor(images=image, return_tensors="pt").to(self.device)
-        pixel_values = inputs.pixel_values
-        target_size = image.shape[:2]
-        
-        if getattr(cfg, "USE_TTA", False):
-            scales = getattr(cfg, "TTA_SCALES", [1.0])
-            all_logits = []
-            for s in scales:
-                if s != 1.0:
-                    scaled_size = (int(cfg.AUG_SIZE[0] * s), int(cfg.AUG_SIZE[1] * s))
-                    scaled_pixels = torch.nn.functional.interpolate(
-                        pixel_values, size=scaled_size, mode="bilinear", align_corners=False
-                    )
-                else:
-                    scaled_pixels = pixel_values
-                
-                s_outputs = model(pixel_values=scaled_pixels)
-                s_logits = torch.nn.functional.interpolate(
-                    s_outputs.logits, size=target_size, mode="bilinear", align_corners=False
-                )
-                all_logits.append(s_logits)
-                
-                f_pixels = torch.flip(scaled_pixels, [3])
-                f_outputs = model(pixel_values=f_pixels)
-                f_logits = torch.nn.functional.interpolate(
-                    f_outputs.logits, size=target_size, mode="bilinear", align_corners=False
-                )
-                uf_logits = torch.flip(f_logits, [3])
-                all_logits.append(uf_logits)
-            
-            return torch.mean(torch.stack(all_logits), dim=0)
-        else:
-            out = model(pixel_values=pixel_values).logits
-            return torch.nn.functional.interpolate(out, size=target_size, mode="bilinear", align_corners=False)
+    Unset keyword arguments default to the ``HYBRID_*`` entries of `cfg`.
+    Both models receive the same input image, so `cfg` and `expert_cfg` must agree on USE_25D.
+    """
 
-    @torch.no_grad()
-    def segment(self, image_np):
-        """
-        Input: Raw 2.5D/Multimodal image [H, W, 3] from OCTDataset
-        Output: Merged Mask [H, W] (0=BG, 1=IRF, 2=SRF, 3=PED)
-        """
-        # --- PASS 1: BASE MODEL ---
-        base_logits = self._predict_logits(self.base_model, self.processor, image_np, config)
-        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
-        
-        # --- PASS 2: EXPERT MODEL (Pure 2D) ---
-        # Extract middle slice (S_n) from 2.5D context and replicate to 3 channels for processor
-        image_2d = image_np[:, :, 1] if len(image_np.shape) == 3 else image_np
-        image_2d_rgb = np.stack([image_2d, image_2d, image_2d], axis=-1)
-        
-        expert_logits = self._predict_logits(self.expert_model, self.processor, image_2d_rgb, expert_config)
-        expert_probs = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()
-        expert_irf_prob = expert_probs[1] # Probability of IRF
-        
-        # --- ENSEMBLE MERGING LOGIC ---
-        target_classes = list(range(1, config.NUM_LABELS))
-        
+    def __init__(self, base_model_path, expert_model_path, cfg: Config, expert_cfg: Config,
+                 ensemble_mode=None, expert_weight=None, blend_strategy=None,
+                 irf_threshold=None, irf_min_region_size=None, irf_override=None):
+        if cfg.USE_25D != expert_cfg.USE_25D:
+            raise ValueError("Base and expert configs must share USE_25D: the hybrid feeds both the same image.")
+        self.cfg, self.expert_cfg = cfg, expert_cfg
+        self.device = cfg.DEVICE
+        self.ensemble_mode = cfg.HYBRID_ENSEMBLE_MODE if ensemble_mode is None else ensemble_mode
+        self.expert_weight = cfg.HYBRID_EXPERT_WEIGHT if expert_weight is None else expert_weight
+        self.blend_strategy = cfg.HYBRID_BLEND_STRATEGY if blend_strategy is None else blend_strategy
+        self.irf_threshold = cfg.HYBRID_IRF_THRESHOLD if irf_threshold is None else irf_threshold
+        self.irf_min_region_size = cfg.HYBRID_IRF_MIN_REGION_SIZE if irf_min_region_size is None else irf_min_region_size
+        self.irf_override = cfg.HYBRID_IRF_OVERRIDE if irf_override is None else irf_override
+
+        self.base_model = load_segformer(cfg, base_model_path)
+        self.expert_model = load_segformer(expert_cfg, expert_model_path)
+        self.processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
+
+    def _merge(self, base_probs, expert_irf_prob):
+        """Merges class probabilities [C,H,W] with the expert IRF map [H,W] into a label mask."""
+        thresholds = dict(self.cfg.CLASS_THRESHOLDS)
+        thresholds[1] = self.irf_threshold
+
         if self.ensemble_mode == "soft":
-            # Probability-level blending for IRF (Class 1)
-            merged_probs = base_probs.copy()
-            
-            P_base = base_probs[1]
-            P_expert = expert_irf_prob
-            w = self.expert_weight
-            
-            if self.blend_strategy == "linear":
-                merged_probs[1] = (1 - w) * P_base + w * P_expert
-            elif self.blend_strategy == "geometric":
-                merged_probs[1] = np.clip((P_base ** (1 - w)) * (P_expert ** w), 0, 1)
-            elif self.blend_strategy == "harmonic":
-                merged_probs[1] = np.clip(1.0 / ((1 - w) / (P_base + 1e-8) + w / (P_expert + 1e-8) + 1e-8), 0, 1)
-            elif self.blend_strategy == "max":
-                merged_probs[1] = np.maximum(P_base, P_expert)
-            elif self.blend_strategy == "min":
-                merged_probs[1] = np.minimum(P_base, P_expert)
-            elif self.blend_strategy == "confidence":
-                # Only blend in the uncertain region of the base model
-                uncertain_mask = (P_base > 0.15) & (P_base < 0.45)
-                blend_val = (1 - w) * P_base + w * P_expert
-                merged_probs[1] = np.where(uncertain_mask, blend_val, P_base)
-            
-            # Clinical Sharpening for PED (Class 3)
-            if config.NUM_LABELS > 3:
-                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-                sharp_ped = cv2.filter2D(merged_probs[3], -1, sharpen_kernel)
-                merged_probs[3] = np.clip(sharp_ped, 0, 1)
-                
-            # Reverse-Priority Thresholding
-            final_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
-            if self.irf_threshold is not None:
-                thresholds[1] = self.irf_threshold
-                
-            if not self.irf_override:
-                # Respect SRF/PED: Lay down SRF (2) and PED (3) first
-                for c in [3, 2]:
-                    thresh = thresholds.get(c, 0.5)
-                    final_mask[merged_probs[c] > thresh] = c
-                # Lay down IRF (1) only where SRF/PED is not present
-                thresh = thresholds.get(1, 0.5)
-                final_mask[(final_mask == 0) & (merged_probs[1] > thresh)] = 1
-            else:
-                # Original reverse-priority order (IRF overrides everything)
-                for c in reversed(target_classes):
-                    thresh = thresholds.get(c, 0.5)
-                    final_mask[merged_probs[c] > thresh] = c
-                
-        else: # "hard" mask-level merging (original logic, but aligned with eval heuristics)
-            # Base Model prediction with sharpening and thresholding
-            base_probs_copy = base_probs.copy()
-            if config.NUM_LABELS > 3:
-                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-                sharp_ped = cv2.filter2D(base_probs_copy[3], -1, sharpen_kernel)
-                base_probs_copy[3] = np.clip(sharp_ped, 0, 1)
-                
-            base_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
-            if self.irf_threshold is not None:
-                thresholds[1] = self.irf_threshold
-                
-            for c in reversed(target_classes):
-                thresh = thresholds.get(c, 0.5)
-                base_mask[base_probs_copy[c] > thresh] = c
-                
-            # Threshold for Expert IRF (aggressive)
-            irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.25})[1]
-            expert_irf_mask = (expert_irf_prob > irf_threshold)
-            
-            final_mask = base_mask.copy()
-            # If expert says IRF, it overrides BG (0) and existing Base IRF (1).
-            # It does NOT override SRF (2) / PED (3) to avoid anatomical corruption.
-            final_mask[(final_mask <= 1) & expert_irf_mask] = 1
-            
-        # --- CLINICAL POST-PROCESSING HEURISTICS (aligned with eval.py) ---
-        cleaned_mask = np.zeros_like(final_mask)
-        kernel_3x3 = np.ones((3, 3), np.uint8)
-        
-        # Use class-specific min region sizes to avoid discarding small expert IRF detections
-        min_region_sizes = {
-            1: self.irf_min_region_size if self.irf_min_region_size is not None else getattr(config, "MIN_REGION_SIZE", 50),
-            2: getattr(config, "MIN_REGION_SIZE", 50),
-            3: getattr(config, "MIN_REGION_SIZE", 50)
-        }
-        
-        for c in target_classes:
-            c_mask = (final_mask == c).astype(np.uint8)
-            if np.any(c_mask):
-                # Morphological separation for IRF (Class 1) to break thin false-positive bridges
-                if c == 1 and config.NUM_LABELS > 1:
-                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
-                
-                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
-                for label in range(1, num_labels):
-                    if stats[label, cv2.CC_STAT_AREA] >= min_region_sizes[c]:
-                        cleaned_mask[labels_im == label] = c
-                        
-        return cleaned_mask
+            merged = base_probs.copy()
+            merged[1] = blend_irf(base_probs[1], expert_irf_prob, self.blend_strategy, self.expert_weight)
+            sharpen_ped(merged)
+            return apply_thresholds(merged, thresholds, irf_override=self.irf_override)
+
+        # "hard": threshold the base model, then let the expert add IRF over background/IRF only
+        # (never over SRF/PED, to avoid anatomical corruption).
+        base_probs = sharpen_ped(base_probs.copy())
+        mask = apply_thresholds(base_probs, thresholds, irf_override=True)
+        expert_mask = expert_irf_prob > self.expert_cfg.CLASS_THRESHOLDS[1]
+        mask[(mask <= 1) & expert_mask] = 1
+        return mask
 
     @torch.no_grad()
-    def segment_with_attention(self, image_np):
+    def segment(self, image_np, return_attention=False):
+        """Segments one image.
+
+        Args:
+            image_np: [H, W, 3] image from OCTDataset (``orig_img``).
+            return_attention: also return the base model's encoder-block-5 attention map.
+
+        Returns:
+            Mask [H, W] (0=BG, 1=IRF, 2=SRF, 3=PED); with `return_attention`, ``(mask, attention_map)``.
         """
-        Input: Raw 2.5D/Multimodal image [H, W, 3] from OCTDataset
-        Output: (merged_mask [H, W], attention_map [64, 64])
-        """
-        # --- PASS 1: BASE MODEL (with TTA and Attention extraction) ---
-        inputs_base = self.processor(images=image_np, return_tensors="pt").to(self.device)
-        pixel_values = inputs_base.pixel_values
+        pixel_values = self.processor(images=image_np, return_tensors="pt").pixel_values.to(self.device)
         target_size = image_np.shape[:2]
-        
-        # Run 1.0 scale forward pass to extract attention map
-        base_outputs = self.base_model(pixel_values=pixel_values, output_attentions=True)
-        
-        # Extract Stage 6 attention for visualization
-        att_stage = base_outputs.attentions[5]
-        avg_att = torch.mean(att_stage, dim=1)
-        spatial_att = torch.mean(avg_att, dim=1)
-        grid_size = int(np.sqrt(spatial_att.shape[1]))
-        att_map = spatial_att.view(-1, grid_size, grid_size).squeeze(0).cpu().numpy()
-        
-        if getattr(config, "USE_TTA", False):
-            scales = getattr(config, "TTA_SCALES", [1.0])
-            all_logits = []
-            for s in scales:
-                if s != 1.0:
-                    scaled_size = (int(config.AUG_SIZE[0] * s), int(config.AUG_SIZE[1] * s))
-                    scaled_pixels = torch.nn.functional.interpolate(
-                        pixel_values, size=scaled_size, mode="bilinear", align_corners=False
-                    )
-                    s_outputs = self.base_model(pixel_values=scaled_pixels)
-                    s_logits = torch.nn.functional.interpolate(
-                        s_outputs.logits, size=target_size, mode="bilinear", align_corners=False
-                    )
-                else:
-                    s_logits = torch.nn.functional.interpolate(
-                        base_outputs.logits, size=target_size, mode="bilinear", align_corners=False
-                    )
-                all_logits.append(s_logits)
-                
-                # Flip augmentation
-                if s != 1.0:
-                    f_pixels = torch.flip(scaled_pixels, [3])
-                else:
-                    f_pixels = torch.flip(pixel_values, [3])
-                    
-                f_outputs = self.base_model(pixel_values=f_pixels)
-                f_logits = torch.nn.functional.interpolate(
-                    f_outputs.logits, size=target_size, mode="bilinear", align_corners=False
-                )
-                uf_logits = torch.flip(f_logits, [3])
-                all_logits.append(uf_logits)
-                
-            base_logits = torch.mean(torch.stack(all_logits), dim=0)
-        else:
-            base_logits = torch.nn.functional.interpolate(base_outputs.logits, size=target_size, mode="bilinear", align_corners=False)
-            
-        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
-        
-        # --- PASS 2: EXPERT MODEL (Pure 2D) ---
-        image_2d = image_np[:, :, 1] if len(image_np.shape) == 3 else image_np
-        image_2d_rgb = np.stack([image_2d, image_2d, image_2d], axis=-1)
-        
-        expert_logits = self._predict_logits(self.expert_model, self.processor, image_2d_rgb, expert_config)
-        expert_probs = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()
-        expert_irf_prob = expert_probs[1] # Probability of IRF
-        
-        # --- ENSEMBLE MERGING LOGIC ---
-        target_classes = list(range(1, config.NUM_LABELS))
-        
-        if self.ensemble_mode == "soft":
-            # Probability-level blending for IRF (Class 1)
-            merged_probs = base_probs.copy()
-            
-            P_base = base_probs[1]
-            P_expert = expert_irf_prob
-            w = self.expert_weight
-            
-            if self.blend_strategy == "linear":
-                merged_probs[1] = (1 - w) * P_base + w * P_expert
-            elif self.blend_strategy == "geometric":
-                merged_probs[1] = np.clip((P_base ** (1 - w)) * (P_expert ** w), 0, 1)
-            elif self.blend_strategy == "harmonic":
-                merged_probs[1] = np.clip(1.0 / ((1 - w) / (P_base + 1e-8) + w / (P_expert + 1e-8) + 1e-8), 0, 1)
-            elif self.blend_strategy == "max":
-                merged_probs[1] = np.maximum(P_base, P_expert)
-            elif self.blend_strategy == "min":
-                merged_probs[1] = np.minimum(P_base, P_expert)
-            elif self.blend_strategy == "confidence":
-                # Only blend in the uncertain region of the base model
-                uncertain_mask = (P_base > 0.15) & (P_base < 0.45)
-                blend_val = (1 - w) * P_base + w * P_expert
-                merged_probs[1] = np.where(uncertain_mask, blend_val, P_base)
-            
-            # Clinical Sharpening for PED (Class 3)
-            if config.NUM_LABELS > 3:
-                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-                sharp_ped = cv2.filter2D(merged_probs[3], -1, sharpen_kernel)
-                merged_probs[3] = np.clip(sharp_ped, 0, 1)
-                
-            # Reverse-Priority Thresholding
-            final_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
-            if self.irf_threshold is not None:
-                thresholds[1] = self.irf_threshold
-                
-            if not self.irf_override:
-                # Respect SRF/PED: Lay down SRF (2) and PED (3) first
-                for c in [3, 2]:
-                    thresh = thresholds.get(c, 0.5)
-                    final_mask[merged_probs[c] > thresh] = c
-                # Lay down IRF (1) only where SRF/PED is not present
-                thresh = thresholds.get(1, 0.5)
-                final_mask[(final_mask == 0) & (merged_probs[1] > thresh)] = 1
-            else:
-                # Original reverse-priority order (IRF overrides everything)
-                for c in reversed(target_classes):
-                    thresh = thresholds.get(c, 0.5)
-                    final_mask[merged_probs[c] > thresh] = c
-                
-        else: # "hard" mask-level merging (original logic, but aligned with eval heuristics)
-            # Base Model prediction with sharpening and thresholding
-            base_probs_copy = base_probs.copy()
-            if config.NUM_LABELS > 3:
-                sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-                sharp_ped = cv2.filter2D(base_probs_copy[3], -1, sharpen_kernel)
-                base_probs_copy[3] = np.clip(sharp_ped, 0, 1)
-                
-            base_mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-            thresholds = getattr(config, "CLASS_THRESHOLDS", {c: 0.5 for c in target_classes}).copy()
-            if self.irf_threshold is not None:
-                thresholds[1] = self.irf_threshold
-                
-            for c in reversed(target_classes):
-                thresh = thresholds.get(c, 0.5)
-                base_mask[base_probs_copy[c] > thresh] = c
-                
-            # Threshold for Expert IRF (aggressive)
-            irf_threshold = getattr(expert_config, "CLASS_THRESHOLDS", {1: 0.25})[1]
-            expert_irf_mask = (expert_irf_prob > irf_threshold)
-            
-            final_mask = base_mask.copy()
-            # If expert says IRF, it overrides BG (0) and existing Base IRF (1).
-            # It does NOT override SRF (2) / PED (3) to avoid anatomical corruption.
-            final_mask[(final_mask <= 1) & expert_irf_mask] = 1
-            
-        # --- CLINICAL POST-PROCESSING HEURISTICS (aligned with eval.py) ---
-        cleaned_mask = np.zeros_like(final_mask)
-        kernel_3x3 = np.ones((3, 3), np.uint8)
-        
-        # Use class-specific min region sizes to avoid discarding small expert IRF detections
-        min_region_sizes = {
-            1: self.irf_min_region_size if self.irf_min_region_size is not None else getattr(config, "MIN_REGION_SIZE", 50),
-            2: getattr(config, "MIN_REGION_SIZE", 50),
-            3: getattr(config, "MIN_REGION_SIZE", 50)
-        }
-        
-        for c in target_classes:
-            c_mask = (final_mask == c).astype(np.uint8)
-            if np.any(c_mask):
-                # Morphological separation for IRF (Class 1) to break thin false-positive bridges
-                if c == 1 and config.NUM_LABELS > 1:
-                    c_mask = cv2.morphologyEx(c_mask, cv2.MORPH_OPEN, kernel_3x3, iterations=1)
-                
-                num_labels, labels_im, stats, _ = cv2.connectedComponentsWithStats(c_mask, 8)
-                for label in range(1, num_labels):
-                    if stats[label, cv2.CC_STAT_AREA] >= min_region_sizes[c]:
-                        cleaned_mask[labels_im == label] = c
-                        
-        return cleaned_mask, att_map
 
-if __name__ == "__main__":
-    # Example usage / Test stub
-    import os
-    from PIL import Image
-    import matplotlib.pyplot as plt
-    
-    BASE_PATH = "best_model.pth"
-    EXPERT_PATH = "irf_expert_best.pth"
-    
-    if os.path.exists(BASE_PATH) and os.path.exists(EXPERT_PATH):
-        engine = HybridInference(BASE_PATH, EXPERT_PATH)
-        print("Hybrid Engine Initialized.")
-    else:
-        print("Missing weights. Train expert first!")
+        base_logits = predict_logits(self.base_model, pixel_values, target_size, self.cfg)
+        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
+        expert_logits = predict_logits(self.expert_model, pixel_values, target_size, self.expert_cfg)
+        expert_irf_prob = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()[1]
+
+        mask = self._merge(base_probs, expert_irf_prob)
+
+        # Class-specific minimum sizes keep small expert IRF detections.
+        min_sizes = {c: self.cfg.MIN_REGION_SIZE for c in range(1, self.cfg.NUM_LABELS)}
+        min_sizes[1] = self.irf_min_region_size
+        mask = clean_regions(mask, min_sizes, irf_open=True)
+
+        if not return_attention:
+            return mask
+        att = self.base_model(pixel_values=pixel_values, output_attentions=True).attentions[5]
+        spatial_att = torch.mean(torch.mean(att, dim=1), dim=1)
+        grid_size = int(np.sqrt(spatial_att.shape[1]))
+        return mask, spatial_att.view(-1, grid_size, grid_size).squeeze(0).cpu().numpy()
