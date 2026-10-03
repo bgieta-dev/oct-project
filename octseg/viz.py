@@ -1,4 +1,5 @@
 """Figures: prediction grid, training curves, and test-slice selection for visualisation."""
+import os
 import cv2
 import matplotlib
 import numpy as np
@@ -95,3 +96,41 @@ def plot_history(history, path):
         plt.title(title)
     plt.savefig(path)
     plt.close()
+
+
+def save_failure_cases(failure_records, output_dir, cfg, top_k=5, dpi=120):
+    """Saves worst-performing failure slices (OCT | GT | Prediction) sorted by IoU ascending.
+
+    Args:
+        failure_records: list of (iou, slice_idx, img_np, gt_mask, pred_mask).
+        output_dir: base evaluation output directory.
+        cfg: config providing NUM_LABELS.
+        top_k: maximum number of failure cases to save.
+        dpi: figure resolution.
+    """
+    if not failure_records:
+        return
+    failures_dir = os.path.join(output_dir, "failures")
+    os.makedirs(failures_dir, exist_ok=True)
+    sorted_records = sorted(failure_records, key=lambda x: x[0])
+    for rank, (iou, slice_idx, img, gt, prd) in enumerate(sorted_records[:top_k]):
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        ax1, ax2, ax3 = axes
+
+        ax1.imshow(img)
+        ax1.set_title(f"OCT (Slice {slice_idx})", fontsize=12, fontweight="bold")
+        ax1.axis("off")
+
+        vmax = cfg.NUM_LABELS - 1 if cfg is not None and hasattr(cfg, "NUM_LABELS") else 3
+        ax2.imshow(gt, cmap="jet", vmin=0, vmax=vmax)
+        ax2.set_title("Ground Truth", fontsize=12)
+        ax2.axis("off")
+
+        ax3.imshow(prd, cmap="jet", vmin=0, vmax=vmax)
+        ax3.set_title(f"Prediction (mIoU: {iou:.2f})", fontsize=12)
+        ax3.axis("off")
+
+        plt.tight_layout()
+        save_path = os.path.join(failures_dir, f"failure_{rank + 1}_idx_{slice_idx}.png")
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)

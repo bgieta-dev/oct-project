@@ -77,6 +77,9 @@ class Config:
     # Lower thresholds force fluid predictions at lower confidence (clinical high recall)
     CLASS_THRESHOLDS: Dict[int, float] = field(default_factory=lambda: {1: 0.30, 2: 0.80, 3: 0.80})
     ATTENTION_CONTRAST: float = 0.6
+    PED_SHARPEN_FACTOR: float = 1.0
+    SAVE_FAILURES: bool = True
+    TOP_K_FAILURES: int = 5
     CENTRAL_SLICE_IDX: int = 1  # centre channel of the 2.5D stack
 
     # --- augmentation ---
@@ -92,6 +95,8 @@ class Config:
     HYBRID_IRF_MIN_REGION_SIZE: int = 12
     HYBRID_IRF_OVERRIDE: bool = False
 
+    HYBRID_CONFIDENCE_LOW: float = 0.15
+    HYBRID_CONFIDENCE_HIGH: float = 0.45
     def __post_init__(self):
         self.AUG_SIZE = tuple(self.AUG_SIZE)
         self.AUG_SCALE = tuple(self.AUG_SCALE)

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from octseg.metrics import SegmentationMetrics
+from octseg.metrics import BoundaryPrecisionAnalyzer, SegmentationMetrics
 
 
 def _mask(*regions, size=32):
@@ -56,3 +56,19 @@ def test_region_counts_and_area():
     res = m.compute()
     assert res["class_avg_regions_gt"][1] == 2 and res["class_avg_regions_pred"][1] == 1
     assert res["class_avg_pixel_area"][1] == 18
+
+
+def test_boundary_precision_analyzer():
+    analyzer = BoundaryPrecisionAnalyzer(kernel_size=3)
+    # Empty mask returns 0.0
+    img = np.zeros((10, 10, 3), dtype=np.uint8)
+    empty_mask = np.zeros((10, 10), dtype=np.uint8)
+    assert analyzer.get_boundary_contrast(img, empty_mask) == 0.0
+
+    # Bright square on dark background
+    img[:, :, 1] = 10  # central slice channel
+    img[3:7, 3:7, 1] = 200
+    mask = np.zeros((10, 10), dtype=np.uint8)
+    mask[3:7, 3:7] = 1
+    contrast = analyzer.get_boundary_contrast(img, mask)
+    assert contrast > 50.0  # high boundary contrast

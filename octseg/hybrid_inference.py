@@ -10,7 +10,7 @@ from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, 
 BLEND_STRATEGIES = ("linear", "geometric", "harmonic", "max", "min", "confidence")
 
 
-def blend_irf(p_base, p_expert, strategy, w):
+def blend_irf(p_base, p_expert, strategy, w, conf_low=0.15, conf_high=0.45):
     """Blends base and expert IRF probability maps; `w` is the expert weight."""
     if strategy == "linear":
         return (1 - w) * p_base + w * p_expert
@@ -24,7 +24,7 @@ def blend_irf(p_base, p_expert, strategy, w):
         return np.minimum(p_base, p_expert)
     if strategy == "confidence":
         # Only blend in the uncertain region of the base model
-        uncertain = (p_base > 0.15) & (p_base < 0.45)
+        uncertain = (p_base > conf_low) & (p_base < conf_high)
         return np.where(uncertain, (1 - w) * p_base + w * p_expert, p_base)
     raise ValueError(f"Unknown blend strategy {strategy!r}; expected one of {BLEND_STRATEGIES}")
 
@@ -59,15 +59,33 @@ class HybridInference:
         thresholds = dict(self.cfg.CLASS_THRESHOLDS)
         thresholds[1] = self.irf_threshold
 
+        conf_low = getattr(self.cfg, "HYBRID_CONFIDENCE_LOW", 0.15)
+        conf_high = getattr(self.cfg, "HYBRID_CONFIDENCE_HIGH", 0.45)
+        ped_factor = getattr(self.cfg, "PED_SHARPEN_FACTOR", 1.0)
+
         if self.ensemble_mode == "soft":
             merged = base_probs.copy()
-            merged[1] = blend_irf(base_probs[1], expert_irf_prob, self.blend_strategy, self.expert_weight)
-            sharpen_ped(merged)
+            p1_old = base_probs[1]
+            p1_new = blend_irf(
+                p1_old,
+                expert_irf_prob,
+                self.blend_strategy,
+                self.expert_weight,
+                conf_low=conf_low,
+                conf_high=conf_high,
+            )
+            p1_new = np.clip(p1_new, 0.0, 1.0)
+            scale = (1.0 - p1_new) / (1.0 - p1_old + 1e-8)
+            for c in range(merged.shape[0]):
+                if c != 1:
+                    merged[c] = np.clip(base_probs[c] * scale, 0.0, 1.0)
+            merged[1] = p1_new
+            sharpen_ped(merged, factor=ped_factor)
             return apply_thresholds(merged, thresholds, irf_override=self.irf_override)
 
         # "hard": threshold the base model, then let the expert add IRF over background/IRF only
         # (never over SRF/PED, to avoid anatomical corruption).
-        base_probs = sharpen_ped(base_probs.copy())
+        base_probs = sharpen_ped(base_probs.copy(), factor=ped_factor)
         mask = apply_thresholds(base_probs, thresholds, irf_override=True)
         expert_mask = expert_irf_prob > self.expert_cfg.CLASS_THRESHOLDS[1]
         mask[(mask <= 1) & expert_mask] = 1

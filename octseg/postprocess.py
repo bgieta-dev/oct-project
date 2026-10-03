@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from scipy import ndimage
 SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
 OPEN_KERNEL = np.ones((3, 3), np.uint8)
 PED_CLASS = 3
@@ -46,21 +47,26 @@ def predict_logits(model, pixel_values, target_size, cfg):
     return torch.mean(torch.stack(all_logits), dim=0)
 
 
-def sharpen_ped(probs):
+def sharpen_ped(probs, factor=1.0):
     """Sharpens the PED probability channel in place and returns `probs`.
 
-    Compensates for bilinear blurring of PED peaks. No-op if there are <= 3 classes.
+    Compensates for bilinear blurring of PED peaks. No-op if there are <= 3 classes or factor <= 0.
 
     Args:
         probs: float32 array [C,H,W] or [B,C,H,W].
+        factor: blend factor between 0.0 (original) and 1.0 (fully sharpened).
     """
-    if probs.shape[-3] <= PED_CLASS:
+    if probs.shape[-3] <= PED_CLASS or factor <= 0:
         return probs
     if probs.ndim == 3:
-        probs[PED_CLASS] = np.clip(cv2.filter2D(probs[PED_CLASS], -1, SHARPEN_KERNEL), 0, 1)
+        orig = probs[PED_CLASS]
+        filtered = np.clip(cv2.filter2D(orig, -1, SHARPEN_KERNEL), 0, 1)
+        probs[PED_CLASS] = np.clip((1.0 - factor) * orig + factor * filtered, 0, 1)
     else:
         for b in range(probs.shape[0]):
-            probs[b, PED_CLASS] = np.clip(cv2.filter2D(probs[b, PED_CLASS], -1, SHARPEN_KERNEL), 0, 1)
+            orig = probs[b, PED_CLASS]
+            filtered = np.clip(cv2.filter2D(orig, -1, SHARPEN_KERNEL), 0, 1)
+            probs[b, PED_CLASS] = np.clip((1.0 - factor) * orig + factor * filtered, 0, 1)
     return probs
 
 
@@ -115,3 +121,46 @@ def clean_regions(mask, min_sizes, irf_open=True):
             if stats[lbl, cv2.CC_STAT_AREA] >= min_size:
                 cleaned[labels_im == lbl] = c
     return cleaned
+
+
+def _filter_3d(vol: np.ndarray, min_slices: int) -> np.ndarray:
+    if min_slices <= 1:
+        return vol.copy()
+    cleaned = vol.copy()
+    struct = np.ones((3, 3, 3), bool)
+    for c in (1, 2, 3):
+        c_mask = (cleaned == c)
+        if not np.any(c_mask):
+            continue
+        labeled, num_features = ndimage.label(c_mask, structure=struct)
+        if num_features == 0:
+            continue
+        slices = ndimage.find_objects(labeled)
+        for comp_id, sl in enumerate(slices, start=1):
+            if sl is None:
+                continue
+            z_span = sl[0].stop - sl[0].start
+            if z_span < min_slices:
+                sub_lbl = labeled[sl]
+                sub_cleaned = cleaned[sl]
+                sub_cleaned[sub_lbl == comp_id] = 0
+                cleaned[sl] = sub_cleaned
+    return cleaned
+
+
+def volumetric_consistency_filter(volume_masks: np.ndarray, min_slices: int = 2) -> np.ndarray:
+    """Removes 3D connected components that span fewer than `min_slices` along the Z axis.
+
+    Args:
+        volume_masks: numpy array of shape [Z, H, W] or [B, Z, H, W].
+        min_slices: minimum number of slices a 3D component must span to be kept.
+
+    Returns:
+        Cleaned volume masks array.
+    """
+    if volume_masks.ndim == 3:
+        return _filter_3d(volume_masks, min_slices)
+    elif volume_masks.ndim == 4:
+        return np.stack([_filter_3d(v, min_slices) for v in volume_masks], axis=0)
+    else:
+        raise ValueError(f"Expected 3D [Z, H, W] or 4D [B, Z, H, W] array, got shape {volume_masks.shape}")

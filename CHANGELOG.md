@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.0] - 2026-10-03
+
+### Added
+- **Volumetric Z-axis Consistency Filter** (`octseg/postprocess.py`): `volumetric_consistency_filter(volume_masks, min_slices=2)` using 3D connected component analysis across consecutive B-scans to filter isolated single-slice false positives.
+- **Configurable PED Sharpening Factor** (`octseg/config.py`, `octseg/postprocess.py`): `PED_SHARPEN_FACTOR` (default 1.0) allowing fine-tuned blending between original and sharpened probabilities.
+- **Calibrated Probability Soft Hybrid Blending** (`octseg/hybrid_inference.py`, `octseg/config.py`): `HYBRID_CONFIDENCE_LOW` (0.15) and `HYBRID_CONFIDENCE_HIGH` (0.45) parameters for confidence-based IRF blending; added probability renormalization of non-IRF classes ($c \neq 1$) to ensure sum of class probabilities equals 1.
+- **Automated Failure Cases Extraction** (`octseg/viz.py`, `octseg/evaluate.py`): `save_failure_cases` automatically exports the top-k worst performing slices by IoU to `output_dir/failures/`.
+- **Unit Test Suite Expansion**: Added unit tests in `tests/test_hybrid.py`, `tests/test_model.py`, `tests/test_viz.py`, and `tests/test_runs.py`, expanding test coverage from 26 to 46 unit tests.
+
 ## [2.0.0] - 2026-10-01 — project reorganisation (see ORGANIZATION_PLAN.md)
 
 ### Changed (layout; tag `pre-reorg` marks the old layout)

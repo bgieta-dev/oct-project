@@ -19,7 +19,7 @@ from octseg.model import load_segformer
 from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
 from octseg.runs import setup_logging
 from octseg.splits import load_splits, patient_of
-from octseg.viz import save_predictions_grid, select_vis_indices
+from octseg.viz import save_failure_cases, save_predictions_grid, select_vis_indices
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def evaluate_model(model_path, output_dir, cfg: Config):
     metrics = SegmentationMetrics(cfg.NUM_LABELS, hd95_missing="skip", extended=True, cfg=cfg)
     thresholds = cfg.CLASS_THRESHOLDS
     vis_data = {}
-
+    failure_records = []
     # 4. Evaluation Loop
     log.info(f"Evaluating on {len(dataset)} slices...")
     global_idx = 0
@@ -77,7 +77,7 @@ def evaluate_model(model_path, output_dir, cfg: Config):
             logits = predict_logits(model, pixel_values, cfg.AUG_SIZE, cfg)
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
 
-        sharpen_ped(probs_batch)
+        sharpen_ped(probs_batch, factor=cfg.PED_SHARPEN_FACTOR)
         preds_batch = apply_thresholds(probs_batch, thresholds, irf_override=True)
         if cfg.MIN_REGION_SIZE > 0:
             preds_batch = np.array([clean_regions(p, cfg.MIN_REGION_SIZE, irf_open=True) for p in preds_batch])
@@ -89,10 +89,24 @@ def evaluate_model(model_path, output_dir, cfg: Config):
                 if global_idx == t_idx:
                     vis_data[c_key] = (orig_img, labels, pred, att_maps[b_idx])
             metrics.update(labels, pred, orig_img)
-            global_idx += 1
 
+            if np.any(labels > 0) or np.any(pred > 0):
+                ious = []
+                for c in range(1, cfg.NUM_LABELS):
+                    intersection = np.sum((labels == c) & (pred == c))
+                    union = np.sum((labels == c) | (pred == c))
+                    if union > 0:
+                        ious.append(intersection / union)
+                slice_miou = float(np.mean(ious)) if ious else 0.0
+                failure_records.append((slice_miou, global_idx, orig_img, labels, pred))
+
+            global_idx += 1
     log.info("Generating predictions.png...")
     save_predictions_grid(vis_data, class_max_counts, cfg, os.path.join(output_dir, "predictions.png"))
+    if getattr(cfg, "SAVE_FAILURES", True) and failure_records:
+        log.info("Saving failure cases...")
+        save_failure_cases(failure_records, output_dir, cfg, top_k=getattr(cfg, "TOP_K_FAILURES", 5))
+
 
     result = metrics.compute()
     result["params"] = total_params
