@@ -36,15 +36,17 @@ def get_vram_config(model_name: str) -> Tuple[int, int]:
 @dataclass
 class Config:
     # --- architecture ---
+    ARCH: str = "segformer"  # "segformer" | "swin_unetr_3d"
     MODEL_NAME: str = "nvidia/mit-b2"
     NUM_LABELS: int = 4
     TARGET_CLASS: Optional[int] = None  # set (e.g. 1) for binary expert models
     USE_MULTIMODAL: bool = True  # only takes effect when USE_25D is False
     USE_25D: bool = True
     SEED: int = 42
-
+    DEVICE_OVERRIDE: Optional[str] = None
     # --- training ---
     LR: float = 5e-5
+    WEIGHT_DECAY: float = 0.05
     EPOCHS: int = 80
     USE_AMP: bool = True
     VAL_INTERVAL: int = 1
@@ -97,19 +99,47 @@ class Config:
 
     HYBRID_CONFIDENCE_LOW: float = 0.15
     HYBRID_CONFIDENCE_HIGH: float = 0.45
+
+    # --- SwinUNETR 3D (ARCH: swin_unetr_3d) ---
+    SWIN_FEATURE_SIZE: int = 48
+    SWIN_ROI: Tuple[int, int, int] = (32, 160, 160)
+    SWIN_VOLUME_SIZE: Tuple[int, int] = (256, 256)
+    SWIN_SAMPLES_PER_VOLUME: int = 2
+    SWIN_PRETRAINED: Optional[str] = None
+    SWIN_DROP_PATH: float = 0.1
+    SWIN_SW_OVERLAP: float = 0.5
+    SWIN_SW_BATCH: int = 4
     def __post_init__(self):
         self.AUG_SIZE = tuple(self.AUG_SIZE)
         self.AUG_SCALE = tuple(self.AUG_SCALE)
+        if isinstance(self.SWIN_ROI, list):
+            self.SWIN_ROI = tuple(self.SWIN_ROI)
+        if isinstance(self.SWIN_VOLUME_SIZE, list):
+            self.SWIN_VOLUME_SIZE = tuple(self.SWIN_VOLUME_SIZE)
+
+        if self.ARCH not in ("segformer", "swin_unetr_3d"):
+            raise ValueError(f"Unknown ARCH {self.ARCH!r}; expected 'segformer' or 'swin_unetr_3d'")
+        if self.ARCH == "swin_unetr_3d":
+            if any(dim % 32 != 0 for dim in self.SWIN_ROI):
+                raise ValueError("SWIN_ROI dims must be divisible by 32")
+            if self.SWIN_PRETRAINED is not None and self.SWIN_FEATURE_SIZE != 48:
+                raise ValueError("SWIN_PRETRAINED requires SWIN_FEATURE_SIZE 48")
+            if self.USE_BOUNDARY_LOSS:
+                raise ValueError("Boundary loss not supported for swin_unetr_3d")
+            if self.TARGET_CLASS is not None:
+                raise ValueError("Target class expert not supported for swin_unetr_3d")
+
         if self.BATCH_SIZE is None or self.ACCUMULATION_STEPS is None:
             batch_size, accum_steps = get_vram_config(self.MODEL_NAME)
             if self.BATCH_SIZE is None:
                 self.BATCH_SIZE = batch_size
             if self.ACCUMULATION_STEPS is None:
                 self.ACCUMULATION_STEPS = accum_steps
-
     # --- runtime-resolved values (never serialised) ---
     @property
     def DEVICE(self) -> torch.device:
+        if self.DEVICE_OVERRIDE is not None:
+            return torch.device(self.DEVICE_OVERRIDE)
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     @property
@@ -133,6 +163,8 @@ class Config:
         """Plain-Python dict of all fields (YAML-serialisable)."""
         d = asdict(self)
         d["AUG_SIZE"], d["AUG_SCALE"] = list(self.AUG_SIZE), list(self.AUG_SCALE)
+        d["SWIN_ROI"] = list(self.SWIN_ROI)
+        d["SWIN_VOLUME_SIZE"] = list(self.SWIN_VOLUME_SIZE)
         return d
 
 

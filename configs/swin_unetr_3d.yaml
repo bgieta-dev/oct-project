@@ -1,0 +1,20 @@
+# Native 3D SwinUNETR (MONAI 1.6.1) on whole OCT volumes; patch training + sliding-window inference.
+# Post-processing/thresholds/AUG_SIZE inherited from base.yaml so metrics match the 2D pipeline at 512x512.
+base: base.yaml
+ARCH: swin_unetr_3d
+MODEL_NAME: monai/SwinUNETR   # informational only (logs); ARCH selects the code path
+BATCH_SIZE: 1                 # volumes per step; each yields SWIN_SAMPLES_PER_VOLUME patches
+ACCUMULATION_STEPS: 1
+LR: 1.0e-04
+WEIGHT_DECAY: 1.0e-05
+EPOCHS: 300
+WARMUP_EPOCHS: 20
+VAL_INTERVAL: 10
+SWIN_FEATURE_SIZE: 48
+SWIN_ROI: [32, 160, 160]
+SWIN_VOLUME_SIZE: [256, 256]
+SWIN_SAMPLES_PER_VOLUME: 2
+SWIN_PRETRAINED: outputs/pretrained/model_swinvit.pt
+SWIN_DROP_PATH: 0.1
+SWIN_SW_OVERLAP: 0.5
+SWIN_SW_BATCH: 4

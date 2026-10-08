@@ -7,6 +7,14 @@ from torch.utils.data import Dataset
 from typing import List, Dict, Any
 from octseg.config import Config
 
+def normalize_slice(img_n: np.ndarray) -> np.ndarray:
+    """Clinical normalization: 1-99 percentile clipping."""
+    p1, p99 = np.percentile(img_n, (1, 99))
+    img_n = np.clip(img_n, p1, p99)
+    img_n = (img_n - p1) / (p99 - p1 + 1e-8)
+    return img_n
+
+
 class OCTDataset(Dataset):
     """
     Patient-aware OCT image loader.
@@ -29,18 +37,11 @@ class OCTDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def _normalize_slice(self, img_n: np.ndarray) -> np.ndarray:
-        """Clinical normalization: 1-99 percentile clipping."""
-        p1, p99 = np.percentile(img_n, (1, 99))
-        img_n = np.clip(img_n, p1, p99)
-        img_n = (img_n - p1) / (p99 - p1 + 1e-8)
-        return img_n
-
     def get_raw_image(self, idx: int) -> np.ndarray:
         """Returns [0, 1] normalized single-slice image."""
         img_path = self.image_paths[idx]
         img_p = Image.open(img_path).convert("L")
-        return self._normalize_slice(np.array(img_p).astype(np.float32))
+        return normalize_slice(np.array(img_p).astype(np.float32))
 
     def get_raw_mask(self, idx: int) -> np.ndarray:
         """Returns raw categorical mask (0=BG, 1=IRF, 2=SRF, 3=PED)"""
@@ -53,7 +54,7 @@ class OCTDataset(Dataset):
             img_p = Image.open(neighbor_path).convert("L")
             if img_p.size != target_size:
                 img_p = img_p.resize(target_size, Image.BILINEAR)
-            return self._normalize_slice(np.array(img_p).astype(np.float32))
+            return normalize_slice(np.array(img_p).astype(np.float32))
         return None
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
@@ -75,7 +76,7 @@ class OCTDataset(Dataset):
             curr_idx = int(name_segments[-1])
 
             t_0_pil = Image.open(img_path).convert("L")
-            t_0_norm = self._normalize_slice(np.array(t_0_pil).astype(np.float32))
+            t_0_norm = normalize_slice(np.array(t_0_pil).astype(np.float32))
             
             t_minus = self._load_neighbor(dir_path, prefix, curr_idx, ext, -1, t_0_pil.size)
             t_plus = self._load_neighbor(dir_path, prefix, curr_idx, ext, 1, t_0_pil.size)
@@ -113,7 +114,7 @@ class OCTDataset(Dataset):
             mask = augmented["mask"]
 
         if not skip_final_norm:
-            image = self._normalize_slice(image.astype(np.float32))
+            image = normalize_slice(image.astype(np.float32))
             image = (image * 255).astype(np.uint8)
             
         aug_size = self.cfg.AUG_SIZE

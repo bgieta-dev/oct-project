@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from octseg.config import Config
-from octseg.hybrid_inference import HybridInference, blend_irf
+from octseg.hybrid_inference import ENSEMBLE_MODES, HybridInference, blend_irf
 
 
 def test_blend_irf_strategies():
@@ -58,9 +58,18 @@ def test_hybrid_inference_mismatched_25d_rejected():
         HybridInference("dummy_base.pth", "dummy_expert.pth", cfg_base, cfg_expert)
 
 
+def test_hybrid_inference_invalid_ensemble_mode():
+    cfg = Config(USE_25D=False)
+    expert_cfg = Config(USE_25D=False)
+    with pytest.raises(ValueError, match="Unknown ensemble mode"):
+        HybridInference("dummy_base.pth", "dummy_expert.pth", cfg, expert_cfg, ensemble_mode="bogus")
+
+
 class _DummyHybrid(HybridInference):
     """Subclass bypassing neural net loading to test _merge logic in isolation."""
     def __init__(self, cfg, expert_cfg, ensemble_mode="soft", expert_weight=0.4, blend_strategy="linear"):
+        if ensemble_mode not in ENSEMBLE_MODES:
+            raise ValueError(f"Unknown ensemble mode {ensemble_mode!r}; expected one of {ENSEMBLE_MODES}")
         self.cfg = cfg
         self.expert_cfg = expert_cfg
         self.ensemble_mode = ensemble_mode
@@ -133,3 +142,126 @@ def test_hybrid_merge_hard_mode_preserves_srf_ped():
     # Background should be claimed by expert as IRF
     assert (mask[4:, :] == 1).all()
     assert (mask[:4, 4:] == 1).all()
+
+
+def test_hybrid_merge_replace_drops_base_irf_when_expert_below_threshold():
+    cfg = Config(CLASS_THRESHOLDS={1: 0.3, 2: 0.8, 3: 0.8})
+    expert_cfg = Config(CLASS_THRESHOLDS={1: 0.25})
+    dummy = _DummyHybrid(cfg, expert_cfg, ensemble_mode="replace")
+
+    # Base has IRF (class 1) everywhere with high confidence
+    base_probs = np.zeros((4, 8, 8), dtype=np.float32)
+    base_probs[1] = 0.95
+    base_probs[0] = 0.05
+
+    # Expert IRF is low confidence (below threshold 0.25)
+    expert_irf = np.full((8, 8), 0.10, dtype=np.float32)
+
+    mask = dummy._merge(base_probs, expert_irf)
+    # Base IRF must be discarded and replaced with 0 since expert <= 0.25
+    assert (mask == 0).all()
+
+
+def test_hybrid_merge_replace_adds_expert_irf_on_background():
+    cfg = Config(CLASS_THRESHOLDS={1: 0.3, 2: 0.8, 3: 0.8})
+    expert_cfg = Config(CLASS_THRESHOLDS={1: 0.25})
+    dummy = _DummyHybrid(cfg, expert_cfg, ensemble_mode="replace")
+
+    # Base has background everywhere
+    base_probs = np.zeros((4, 8, 8), dtype=np.float32)
+    base_probs[0] = 1.0
+
+    # Expert has high IRF probability
+    expert_irf = np.full((8, 8), 0.80, dtype=np.float32)
+
+    mask = dummy._merge(base_probs, expert_irf)
+    # Background claimed by expert IRF
+    assert (mask == 1).all()
+
+
+def test_hybrid_merge_replace_never_overwrites_srf_ped():
+    cfg = Config(CLASS_THRESHOLDS={1: 0.3, 2: 0.8, 3: 0.8})
+    expert_cfg = Config(CLASS_THRESHOLDS={1: 0.25})
+    dummy = _DummyHybrid(cfg, expert_cfg, ensemble_mode="replace")
+
+    base_probs = np.zeros((4, 8, 8), dtype=np.float32)
+    # Both IRF and SRF/PED have high probability, but SRF/PED priority 1 should be kept
+    base_probs[1] = 0.90
+    base_probs[2, :4, :] = 0.95   # SRF top half
+    base_probs[3, 4:, :] = 0.95   # PED bottom half
+
+    # Expert IRF is very confident
+    expert_irf = np.full((8, 8), 0.99, dtype=np.float32)
+
+    mask = dummy._merge(base_probs, expert_irf)
+    assert (mask[:4, :] == 2).all()
+    assert (mask[4:, :] == 3).all()
+
+
+@pytest.mark.parametrize("mode", ["soft", "hard", "replace"])
+def test_hybrid_postprocess_does_not_mutate_inputs(mode):
+    cfg = Config(CLASS_THRESHOLDS={1: 0.3, 2: 0.8, 3: 0.8}, HYBRID_IRF_MIN_REGION_SIZE=1)
+    expert_cfg = Config(CLASS_THRESHOLDS={1: 0.25})
+    dummy = _DummyHybrid(cfg, expert_cfg, ensemble_mode=mode)
+
+    base_probs = np.zeros((4, 16, 16), dtype=np.float32)
+    base_probs[0] = 0.4
+    base_probs[1] = 0.35
+    base_probs[2] = 0.15
+    base_probs[3] = 0.1
+    expert_irf = np.full((16, 16), 0.6, dtype=np.float32)
+
+    base_copy = base_probs.copy()
+    expert_copy = expert_irf.copy()
+
+    _ = dummy.postprocess(base_probs, expert_irf)
+
+    assert np.array_equal(base_probs, base_copy)
+    assert np.array_equal(expert_irf, expert_copy)
+
+
+def test_select_best_filtering():
+    from octseg.sweep_hybrid import select_best
+
+    base_row = {
+        "class_dices": {1: 0.50, 2: 0.70, 3: 0.60},
+    }
+
+    # Case 1: Row beats IRF, but drops SRF by more than tolerance (0.01) -> skipped
+    row_violating_srf = {
+        "params": {"ensemble_mode": "soft", "blend_strategy": "linear", "expert_weight": 0.4, "irf_threshold": 0.25},
+        "class_dices": {1: 0.55, 2: 0.68, 3: 0.60},  # SRF dropped by 0.02 > 0.01
+    }
+    # Case 2: Row beats IRF, but drops PED by more than tolerance -> skipped
+    row_violating_ped = {
+        "params": {"ensemble_mode": "soft", "blend_strategy": "linear", "expert_weight": 0.5, "irf_threshold": 0.25},
+        "class_dices": {1: 0.56, 2: 0.70, 3: 0.58},  # PED dropped by 0.02 > 0.01
+    }
+    assert select_best([row_violating_srf, row_violating_ped], base_row, tolerance=0.01) is None
+
+    # Case 3: No row beats base IRF Dice -> None
+    row_lower_irf = {
+        "params": {"ensemble_mode": "hard"},
+        "class_dices": {1: 0.49, 2: 0.70, 3: 0.60},
+    }
+    row_equal_irf = {
+        "params": {"ensemble_mode": "replace"},
+        "class_dices": {1: 0.50, 2: 0.70, 3: 0.60},
+    }
+    assert select_best([row_lower_irf, row_equal_irf], base_row, tolerance=0.01) is None
+
+    # Case 4: Qualifying rows -> picks highest IRF; ties -> first in grid order
+    row_qualifying_1 = {
+        "params": {"ensemble_mode": "soft", "expert_weight": 0.3},
+        "class_dices": {1: 0.52, 2: 0.695, 3: 0.60},
+    }
+    row_qualifying_2 = {
+        "params": {"ensemble_mode": "soft", "expert_weight": 0.4},
+        "class_dices": {1: 0.54, 2: 0.692, 3: 0.595},  # SRF/PED within 0.01
+    }
+    row_qualifying_tie = {
+        "params": {"ensemble_mode": "soft", "expert_weight": 0.5},
+        "class_dices": {1: 0.54, 2: 0.70, 3: 0.60},
+    }
+    best = select_best([row_qualifying_1, row_qualifying_2, row_qualifying_tie], base_row, tolerance=0.01)
+    assert best == row_qualifying_2  # first of the 0.54 ties

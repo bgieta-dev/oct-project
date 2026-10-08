@@ -1,6 +1,6 @@
 import pytest
 
-from octseg.config import CONFIG_DIR, Config, load_config
+from octseg.config import CONFIG_DIR, Config, load_config, save_config
 
 
 def test_base_yaml_matches_dataclass_defaults():
@@ -25,3 +25,23 @@ def test_unknown_key_fails_loudly(tmp_path):
 def test_hybrid_config_inherits_base():
     hybrid = load_config(CONFIG_DIR / "hybrid.yaml")
     assert hybrid.MODEL_NAME == "nvidia/mit-b2" and hybrid.HYBRID_IRF_MIN_REGION_SIZE == 12
+
+
+def test_swin_unetr_config_validation():
+    with pytest.raises(ValueError, match="Unknown ARCH"):
+        Config(ARCH="invalid_arch")
+
+    with pytest.raises(ValueError, match="SWIN_ROI dims must be divisible by 32"):
+        Config(ARCH="swin_unetr_3d", SWIN_ROI=(32, 100, 160))
+
+    with pytest.raises(ValueError, match="SWIN_PRETRAINED requires SWIN_FEATURE_SIZE 48"):
+        Config(ARCH="swin_unetr_3d", SWIN_PRETRAINED="x", SWIN_FEATURE_SIZE=24)
+
+
+def test_swin_unetr_config_yaml_roundtrip(tmp_path):
+    cfg = Config(ARCH="swin_unetr_3d", SWIN_ROI=(32, 160, 160))
+    out_yaml = tmp_path / "swin.yaml"
+    save_config(cfg, out_yaml)
+    loaded = load_config(out_yaml)
+    assert loaded.SWIN_ROI == (32, 160, 160)
+    assert isinstance(loaded.SWIN_ROI, tuple)

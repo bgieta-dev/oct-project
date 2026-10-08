@@ -12,7 +12,7 @@ from octseg.config import Config, ROOT, load_config
 from octseg.dataset import OCTDataset
 from octseg.model import load_segformer
 from octseg.runs import setup_logging
-from octseg.splits import load_splits, patient_of
+from octseg.splits import split_files
 from octseg.viz import select_vis_indices
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,8 @@ def generate_attention_maps(model_path, output_dir, cfg: Config):
     Files are named ``att_idx<slice>_<class>_block<i>.png``; ``i`` indexes all encoder blocks
     (not SegFormer stages). Raises FileNotFoundError if the checkpoint is missing.
     """
+    if cfg.ARCH != "segformer":
+        raise ValueError("generate_attention_maps requires ARCH=segformer")
     os.makedirs(output_dir, exist_ok=True)
 
     log.info(f"Loading model for attention visualization: {model_path}...")
@@ -31,10 +33,7 @@ def generate_attention_maps(model_path, output_dir, cfg: Config):
     processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
 
     # Find the slices with the most pixels per class (1: IRF, 2: SRF, 3: PED)
-    all_files = sorted(os.listdir(cfg.IMG_DIR))
-    test_patients = set(load_splits(cfg.SPLIT_DIR)[2])
-    test_imgs = [os.path.join(cfg.IMG_DIR, f) for f in all_files if patient_of(f) in test_patients]
-    test_masks = [os.path.join(cfg.MASK_DIR, f) for f in all_files if patient_of(f) in test_patients]
+    test_imgs, test_masks = split_files(cfg, "test")
 
     log.info("Scanning for slices with significant pathology for visualization...")
     vis_indices, _ = select_vis_indices(test_masks, list(range(1, cfg.NUM_LABELS)))

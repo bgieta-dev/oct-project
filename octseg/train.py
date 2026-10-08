@@ -16,7 +16,7 @@ from octseg.dataset import OCTDataset
 from octseg.losses import BoundaryLoss, FocalLoss, TverskyLoss
 from octseg.metrics import SegmentationMetrics
 from octseg.postprocess import clean_regions
-from octseg.splits import load_splits, patient_of
+from octseg.splits import split_files
 from octseg.viz import plot_history
 
 log = logging.getLogger(__name__)
@@ -60,23 +60,6 @@ def calculate_dynamic_weights(mask_paths, num_classes, target_class=None):
     return weights
 
 
-def distribute_files(all_files, train_p, val_p, cfg):
-    train_p, val_p = set(train_p), set(val_p)
-    train_imgs, train_masks = [], []
-    val_imgs, val_masks = [], []
-    for f in all_files:
-        p = patient_of(f)
-        img_path = os.path.join(cfg.IMG_DIR, f)
-        mask_path = os.path.join(cfg.MASK_DIR, f)
-        if p in train_p:
-            train_imgs.append(img_path)
-            train_masks.append(mask_path)
-        elif p in val_p:
-            val_imgs.append(img_path)
-            val_masks.append(mask_path)
-    return (train_imgs, train_masks), (val_imgs, val_masks)
-
-
 def validate(model, val_loader, cfg):
     """One validation pass. Returns (mIoU, mHD95); HD95 uses the 100-px penalty for missed/false classes."""
     model.eval()
@@ -112,9 +95,8 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
     save_path = os.path.join(output_dir, "best_model.pth") if save_path is None else save_path
     seed_everything(cfg.SEED)
 
-    all_files = sorted(os.listdir(cfg.IMG_DIR))
-    train_patients, val_patients, _ = load_splits(cfg.SPLIT_DIR)
-    (train_imgs, train_masks), (val_imgs, val_masks) = distribute_files(all_files, train_patients, val_patients, cfg)
+    train_imgs, train_masks = split_files(cfg, "train")
+    val_imgs, val_masks = split_files(cfg, "val")
 
     if cfg.USE_DYNAMIC_WEIGHTS:
         dyn_weights = calculate_dynamic_weights(train_masks, num_classes=cfg.NUM_LABELS, target_class=cfg.TARGET_CLASS)
@@ -152,7 +134,7 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
         classifier_dropout_prob=cfg.DROPOUT_RATE,
     ).to(cfg.DEVICE)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.LR, weight_decay=5e-2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.LR, weight_decay=cfg.WEIGHT_DECAY)
     scheduler = get_cosine_schedule_with_warmup(
         optimizer, num_warmup_steps=cfg.WARMUP_EPOCHS, num_training_steps=epochs
     )
@@ -214,6 +196,8 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
                 log.info(f"New best model saved! (mIoU: {best_miou:.4f})")
 
         plot_history(history, os.path.join(output_dir, "metrics.png"))
+    if torch.cuda.is_available():
+        log.info(f"Peak training VRAM: {torch.cuda.max_memory_allocated() / 2**20:.0f} MB")
 
 
 def main():
@@ -230,7 +214,11 @@ def main():
     run_dir = str(make_run_dir("runs", args.name, args.output))
     setup_logging(run_dir)
     save_config(cfg, os.path.join(run_dir, "config.yaml"))
-    train_model(run_dir, cfg, epochs=args.epochs)
+    if cfg.ARCH == "swin_unetr_3d":
+        from octseg.train3d import train_model_3d
+        train_model_3d(run_dir, cfg, epochs=args.epochs)
+    else:
+        train_model(run_dir, cfg, epochs=args.epochs)
 
 
 if __name__ == "__main__":

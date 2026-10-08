@@ -66,14 +66,15 @@ class TverskyLoss(torch.nn.Module):
     def forward(self, pred, target, mask=None):
         pred = torch.softmax(pred, dim=1)
         target_long = target.long()
-        target_one_hot = torch.nn.functional.one_hot(target_long, self.num_classes).permute(0, 3, 1, 2).float()
-        
+        target_one_hot = torch.nn.functional.one_hot(target_long, self.num_classes)
+        nd = target_one_hot.ndim
+        target_one_hot = target_one_hot.permute(0, nd - 1, *range(1, nd - 1)).float()
         if mask is not None:
             mask = mask.unsqueeze(1)
             pred = pred * mask
             target_one_hot = target_one_hot * mask
             
-        dims = (0, 2, 3)
+        dims = (0,) + tuple(range(2, pred.ndim))
         tp = torch.sum(pred * target_one_hot, dims)
         fp = torch.sum(pred * (1 - target_one_hot), dims)
         fn = torch.sum((1 - pred) * target_one_hot, dims)

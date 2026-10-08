@@ -14,6 +14,8 @@ def train_expert(run_dir, cfg: Config, epochs=None):
     Target: mit-b0 architecture with high-recall Tversky loss.
     Best weights are written to ``<run_dir>/best_model.pth``.
     """
+    if cfg.ARCH != "segformer":
+        raise ValueError("train_expert requires ARCH=segformer")
     log.info("--- STARTING IRF EXPERT TRAINING ---")
     log.info(f"Target Class: {cfg.CLASS_NAMES[cfg.TARGET_CLASS]}")
     log.info(f"Model: {cfg.MODEL_NAME} | Tversky Beta: {cfg.TVERSKY_BETA} | 2.5D: {cfg.USE_25D}")

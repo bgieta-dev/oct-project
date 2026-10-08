@@ -14,11 +14,11 @@ from transformers import SegformerImageProcessor
 
 from octseg.config import Config, load_config, save_config, ROOT
 from octseg.dataset import OCTDataset
-from octseg.metrics import SegmentationMetrics, save_metrics_yaml
+from octseg.metrics import SegmentationMetrics, save_metrics_yaml, slice_mean_iou
 from octseg.model import load_segformer
 from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
 from octseg.runs import setup_logging
-from octseg.splits import load_splits, patient_of
+from octseg.splits import split_files
 from octseg.viz import save_failure_cases, save_predictions_grid, select_vis_indices
 
 log = logging.getLogger(__name__)
@@ -32,10 +32,7 @@ def evaluate_model(model_path, output_dir, cfg: Config):
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. Load Data
-    all_files = sorted(os.listdir(cfg.IMG_DIR))
-    test_patients = set(load_splits(cfg.SPLIT_DIR)[2])
-    test_imgs = [os.path.join(cfg.IMG_DIR, f) for f in all_files if patient_of(f) in test_patients]
-    test_masks = [os.path.join(cfg.MASK_DIR, f) for f in all_files if patient_of(f) in test_patients]
+    test_imgs, test_masks = split_files(cfg, "test")
 
     target_classes = list(range(1, cfg.NUM_LABELS))
     log.info("Scanning raw masks for visualisation slice selection...")
@@ -90,14 +87,8 @@ def evaluate_model(model_path, output_dir, cfg: Config):
                     vis_data[c_key] = (orig_img, labels, pred, att_maps[b_idx])
             metrics.update(labels, pred, orig_img)
 
-            if np.any(labels > 0) or np.any(pred > 0):
-                ious = []
-                for c in range(1, cfg.NUM_LABELS):
-                    intersection = np.sum((labels == c) & (pred == c))
-                    union = np.sum((labels == c) | (pred == c))
-                    if union > 0:
-                        ious.append(intersection / union)
-                slice_miou = float(np.mean(ious)) if ious else 0.0
+            slice_miou = slice_mean_iou(labels, pred, cfg.NUM_LABELS)
+            if slice_miou is not None:
                 failure_records.append((slice_miou, global_idx, orig_img, labels, pred))
 
             global_idx += 1
@@ -141,7 +132,11 @@ def main():
 
     log.info(f"Starting Standalone Evaluation. Results will be saved to: {eval_dir}")
     try:
-        metrics = evaluate_model(model_path=args.model, output_dir=eval_dir, cfg=cfg)
+        if cfg.ARCH == "swin_unetr_3d":
+            from octseg.evaluate3d import evaluate_model_3d
+            metrics = evaluate_model_3d(model_path=args.model, output_dir=eval_dir, cfg=cfg)
+        else:
+            metrics = evaluate_model(model_path=args.model, output_dir=eval_dir, cfg=cfg)
         log.info("--- GLOBAL EVALUATION RESULTS ---")
         log_metrics(metrics, cfg)
         log.info(f"Evaluation complete. All clinical artifacts saved in: {eval_dir}")

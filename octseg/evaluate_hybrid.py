@@ -10,10 +10,10 @@ from tqdm import tqdm
 
 from octseg.config import CONFIG_DIR, ROOT, Config, load_config, save_config
 from octseg.dataset import OCTDataset
-from octseg.hybrid_inference import BLEND_STRATEGIES, HybridInference
+from octseg.hybrid_inference import BLEND_STRATEGIES, ENSEMBLE_MODES, HybridInference
 from octseg.metrics import SegmentationMetrics, save_metrics_yaml
 from octseg.runs import setup_logging
-from octseg.splits import load_splits, patient_of
+from octseg.splits import load_splits, split_files
 from octseg.viz import save_predictions_grid, select_vis_indices
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,8 @@ def evaluate_hybrid(base_weights, expert_weights, output_dir, cfg: Config, exper
     Unset hybrid parameters default to the ``HYBRID_*`` config entries. Raises FileNotFoundError
     if a checkpoint is missing. Returns the metrics dict (also written to metrics.yaml).
     """
+    if cfg.ARCH != "segformer" or expert_cfg.ARCH != "segformer":
+        raise ValueError("Hybrid evaluation requires ARCH=segformer")
     os.makedirs(output_dir, exist_ok=True)
     log.info("--- STARTING HYBRID EVALUATION ---")
 
@@ -36,15 +38,13 @@ def evaluate_hybrid(base_weights, expert_weights, output_dir, cfg: Config, exper
     )
     log.info(f"Ensemble Mode: {engine.ensemble_mode} | Expert Weight: {engine.expert_weight} | Blend Strategy: {engine.blend_strategy} | IRF Threshold: {engine.irf_threshold} | IRF Min Region Size: {engine.irf_min_region_size} | IRF Override: {engine.irf_override}")
 
-    all_files = sorted(os.listdir(cfg.IMG_DIR))
-    test_patients = set(load_splits(cfg.SPLIT_DIR)[2])
-    test_imgs = [os.path.join(cfg.IMG_DIR, f) for f in all_files if patient_of(f) in test_patients]
-    test_masks = [os.path.join(cfg.MASK_DIR, f) for f in all_files if patient_of(f) in test_patients]
+    test_imgs, test_masks = split_files(cfg, "test")
+    num_test_patients = len(load_splits(cfg.SPLIT_DIR)[2])
 
     val_transform = A.Compose([A.Resize(height=cfg.AUG_SIZE[0], width=cfg.AUG_SIZE[1])])
     ds = OCTDataset(image_paths=test_imgs, mask_paths=test_masks, processor=engine.processor,
                     transform=val_transform, cfg=cfg)
-    log.info(f"Testing on {len(ds)} images from {len(test_patients)} patients.")
+    log.info(f"Testing on {len(ds)} images from {num_test_patients} patients.")
 
     vis_indices, class_max_counts = select_vis_indices(test_masks, list(range(1, cfg.NUM_LABELS)))
     log.info(f"Dynamic vis indices: {vis_indices}")
@@ -87,7 +87,8 @@ def main():
     parser.add_argument("--expert-weights", type=str, required=True, help="Path to expert model weights")
     parser.add_argument("--output", type=str, help="Output directory (default: outputs/hybrid_eval/<timestamp>)")
     # Hybrid options default to the HYBRID_* entries of --config.
-    parser.add_argument("--ensemble-mode", type=str, default=None, choices=["soft", "hard"], help="soft (probability blend) or hard (mask override)")
+    parser.add_argument("--ensemble-mode", type=str, default=None, choices=ENSEMBLE_MODES,
+                        help="soft (probability blend), hard (expert adds IRF), replace (expert IRF replaces base IRF)")
     parser.add_argument("--expert-weight", type=float, default=None, help="Weight of expert predictions in soft ensemble (0.0 to 1.0)")
     parser.add_argument("--blend-strategy", type=str, default=None, choices=BLEND_STRATEGIES, help="Blending strategy for soft ensembling")
     parser.add_argument("--irf-threshold", type=float, default=None, help="Decision threshold for IRF; lower = more sensitive")

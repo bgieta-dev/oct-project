@@ -9,8 +9,8 @@ import torch
 from octseg.config import load_config, save_config
 from octseg.attention_visualizer import generate_attention_maps
 from octseg.evaluate import evaluate_model, log_metrics
-from octseg.runs import (archive_experiment_sources, check_vram_diagnostics, make_run_dir,
-                         send_discord_notification, setup_logging)
+from octseg.runs import (archive_experiment_sources, check_vram_diagnostics, get_next_experiment_name,
+                         make_run_dir, promote_run_to_experiment, send_discord_notification, setup_logging)
 from octseg.train import train_model
 
 log = logging.getLogger(__name__)
@@ -30,8 +30,11 @@ def main():
     parser.add_argument("--output", default=None, help="Run directory (default: outputs/runs/<timestamp>_<name>)")
     parser.add_argument("--name", default="run", help="Run name suffix (default: run)")
     parser.add_argument("--epochs", type=int, default=None, help="Override the number of epochs")
+    parser.add_argument("--promote", action="store_true", help="Automatically copy run outputs into experiments/<name>")
     args = parser.parse_args()
 
+    if args.promote and args.name == "run":
+        args.name = get_next_experiment_name()
     config = load_config(args.config)
     exp_dir = str(make_run_dir("runs", args.name, args.output))
     model_path = os.path.join(exp_dir, "best_model.pth")
@@ -48,7 +51,11 @@ def main():
     log.info("--- PHASE 1: TRAINING ---")
     training_success = False
     try:
-        train_model(exp_dir, cfg=config, epochs=args.epochs)
+        if config.ARCH == "swin_unetr_3d":
+            from octseg.train3d import train_model_3d
+            train_model_3d(exp_dir, cfg=config, epochs=args.epochs)
+        else:
+            train_model(exp_dir, cfg=config, epochs=args.epochs)
         if os.path.exists(model_path):
             training_success = True
             log.info("Training complete. Model weights stored safely.")
@@ -68,7 +75,11 @@ def main():
     metrics = None
     if training_success:
         try:
-            metrics = evaluate_model(model_path=model_path, output_dir=exp_dir, cfg=config)
+            if config.ARCH == "swin_unetr_3d":
+                from octseg.evaluate3d import evaluate_model_3d
+                metrics = evaluate_model_3d(model_path=model_path, output_dir=exp_dir, cfg=config)
+            else:
+                metrics = evaluate_model(model_path=model_path, output_dir=exp_dir, cfg=config)
             log_metrics(metrics, config)
         except Exception:
             log.error("ERROR during evaluation phase:")
@@ -78,7 +89,9 @@ def main():
 
     # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
     log.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
-    if training_success:
+    if config.ARCH == "swin_unetr_3d":
+        log.info("Attention maps skipped: ARCH=swin_unetr_3d has no SegFormer attention")
+    elif training_success:
         try:
             generate_attention_maps(model_path=model_path, output_dir=os.path.join(exp_dir, "attention_maps"), cfg=config)
         except Exception:
@@ -90,6 +103,8 @@ def main():
     # PHASE 4: ARCHIVING
     archive_experiment_sources(exp_dir)
     log.info(f"Pipeline run fully finalized. All output saved to {exp_dir}")
+    if args.promote:
+        promote_run_to_experiment(exp_dir, args.name)
 
     # Send Notification
     run = os.path.basename(exp_dir)

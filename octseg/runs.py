@@ -1,4 +1,6 @@
 """Run-directory plumbing: logging, source/config snapshots, VRAM diagnostics, Discord notification."""
+import re
+from typing import Union
 import logging
 import os
 import shutil
@@ -99,3 +101,48 @@ def archive_experiment_sources(run_dir):
     except Exception as e:
         log.error(f"Error encountered during source archiving: {e}")
         log.error(traceback.format_exc())
+
+
+def get_next_experiment_name(experiments_md_path=None) -> str:
+    """Returns the next experiment name (e.g. 'test19') based on docs/EXPERIMENTS.md."""
+    md_path = Path(experiments_md_path) if experiments_md_path else ROOT / "docs" / "EXPERIMENTS.md"
+    max_num = 0
+    if md_path.exists():
+        text = md_path.read_text(encoding="utf-8")
+        matches = re.findall(r"\|\s*test(\d+)\b", text)
+        if matches:
+            max_num = max(int(m) for m in matches)
+    if max_num == 0:
+        exp_dir = ROOT / "experiments"
+        if exp_dir.exists():
+            for entry in exp_dir.iterdir():
+                m = re.match(r"^test(\d+)", entry.name)
+                if m:
+                    max_num = max(max_num, int(m.group(1)))
+    return f"test{max_num + 1}"
+
+
+def promote_run_to_experiment(run_dir: Union[str, Path], exp_name: str) -> Path:
+    """Promotes run outputs into experiments/<exp_name>, strictly excluding checkpoints."""
+    run_path = Path(run_dir).resolve()
+    dest_path = ROOT / "experiments" / exp_name
+    dest_path.mkdir(parents=True, exist_ok=True)
+
+    log.info(f"Promoting run {run_path.name} to {dest_path.relative_to(ROOT)}...")
+    for item in run_path.iterdir():
+        if item.name.endswith(".pth") or item.name.endswith(".pt"):
+            log.info(f"Skipping checkpoint: {item.name}")
+            continue
+        dest_item = dest_path / item.name
+        if item.is_dir():
+            shutil.copytree(
+                item,
+                dest_item,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("*.pth", "*.pt", "__pycache__"),
+            )
+        else:
+            shutil.copy2(item, dest_item)
+
+    log.info(f"Successfully promoted to {dest_path} (checkpoints excluded).")
+    return dest_path

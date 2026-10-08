@@ -1,5 +1,6 @@
 """Segmentation metrics: confusion-matrix IoU/Dice, HD95/ASD, region counts, boundary contrast."""
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -13,6 +14,18 @@ HD95_PENALTY = 100.0
 
 def safe_mean(values):
     return float(np.mean(values)) if len(values) else 0.0
+
+def slice_mean_iou(labels, pred, num_classes) -> Optional[float]:
+    """Mean IoU over fluid classes present in labels or pred; None if the slice has no fluid at all."""
+    if not (np.any(labels > 0) or np.any(pred > 0)):
+        return None
+    ious = []
+    for c in range(1, num_classes):
+        intersection = np.sum((labels == c) & (pred == c))
+        union = np.sum((labels == c) | (pred == c))
+        if union > 0:
+            ious.append(intersection / union)
+    return float(np.mean(ious)) if ious else 0.0
 
 
 class BoundaryPrecisionAnalyzer:

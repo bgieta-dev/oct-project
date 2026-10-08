@@ -13,3 +13,5 @@ matplotlib==3.10.9
 tqdm==4.67.3
 python-dotenv==1.2.2
 requests==2.33.1
+monai==1.6.1
+einops==0.8.2

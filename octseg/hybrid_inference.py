@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -7,8 +9,8 @@ from octseg.config import Config
 from octseg.model import load_segformer
 from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
 
+ENSEMBLE_MODES = ("soft", "hard", "replace")
 BLEND_STRATEGIES = ("linear", "geometric", "harmonic", "max", "min", "confidence")
-
 
 def blend_irf(p_base, p_expert, strategy, w, conf_low=0.15, conf_high=0.45):
     """Blends base and expert IRF probability maps; `w` is the expert weight."""
@@ -30,7 +32,7 @@ def blend_irf(p_base, p_expert, strategy, w, conf_low=0.15, conf_high=0.45):
 
 
 class HybridInference:
-    """Multi-class base SegFormer + binary IRF expert, merged at probability ("soft") or mask ("hard") level.
+    """Multi-class base SegFormer + binary IRF expert, merged via "soft", "hard", or "replace" mode.
 
     Unset keyword arguments default to the ``HYBRID_*`` entries of `cfg`.
     Both models receive the same input image, so `cfg` and `expert_cfg` must agree on USE_25D.
@@ -44,6 +46,8 @@ class HybridInference:
         self.cfg, self.expert_cfg = cfg, expert_cfg
         self.device = cfg.DEVICE
         self.ensemble_mode = cfg.HYBRID_ENSEMBLE_MODE if ensemble_mode is None else ensemble_mode
+        if self.ensemble_mode not in ENSEMBLE_MODES:
+            raise ValueError(f"Unknown ensemble mode {self.ensemble_mode!r}; expected one of {ENSEMBLE_MODES}")
         self.expert_weight = cfg.HYBRID_EXPERT_WEIGHT if expert_weight is None else expert_weight
         self.blend_strategy = cfg.HYBRID_BLEND_STRATEGY if blend_strategy is None else blend_strategy
         self.irf_threshold = cfg.HYBRID_IRF_THRESHOLD if irf_threshold is None else irf_threshold
@@ -83,13 +87,56 @@ class HybridInference:
             sharpen_ped(merged, factor=ped_factor)
             return apply_thresholds(merged, thresholds, irf_override=self.irf_override)
 
+        if self.ensemble_mode == "replace":
+            probs = sharpen_ped(base_probs.copy(), factor=ped_factor)
+            mask = apply_thresholds(probs, thresholds, irf_override=False)   # base SRF/PED kept (priority 1)
+            mask[mask == 1] = 0                                               # base IRF discarded
+            mask[(mask == 0) & (expert_irf_prob > self.expert_cfg.CLASS_THRESHOLDS[1])] = 1  # expert IRF (priority 2)
+            return mask
+
         # "hard": threshold the base model, then let the expert add IRF over background/IRF only
         # (never over SRF/PED, to avoid anatomical corruption).
-        base_probs = sharpen_ped(base_probs.copy(), factor=ped_factor)
-        mask = apply_thresholds(base_probs, thresholds, irf_override=True)
+        probs = sharpen_ped(base_probs.copy(), factor=ped_factor)
+        mask = apply_thresholds(probs, thresholds, irf_override=True)
         expert_mask = expert_irf_prob > self.expert_cfg.CLASS_THRESHOLDS[1]
         mask[(mask <= 1) & expert_mask] = 1
         return mask
+
+    @torch.no_grad()
+    def probabilities(self, image_np) -> Tuple[np.ndarray, np.ndarray]:
+        """Runs base and expert models on `image_np` and returns their probabilities.
+
+        Args:
+            image_np: [H, W, 3] image from OCTDataset (``orig_img``).
+
+        Returns:
+            (base_probs [C, H, W], expert_irf_prob [H, W]).
+        """
+        pixel_values = self.processor(images=image_np, return_tensors="pt").pixel_values.to(self.device)
+        target_size = image_np.shape[:2]
+
+        base_logits = predict_logits(self.base_model, pixel_values, target_size, self.cfg)
+        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
+        expert_logits = predict_logits(self.expert_model, pixel_values, target_size, self.expert_cfg)
+        expert_irf_prob = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()[1]
+        return base_probs, expert_irf_prob
+
+    def postprocess(self, base_probs, expert_irf_prob) -> np.ndarray:
+        """Merges class probabilities and cleans regions. Does not mutate inputs.
+
+        Args:
+            base_probs: Base model class probabilities [C, H, W].
+            expert_irf_prob: Expert model IRF probabilities [H, W].
+
+        Returns:
+            Cleaned label mask [H, W].
+        """
+        mask = self._merge(base_probs, expert_irf_prob)
+
+        # Class-specific minimum sizes keep small expert IRF detections.
+        min_sizes = {c: self.cfg.MIN_REGION_SIZE for c in range(1, self.cfg.NUM_LABELS)}
+        min_sizes[1] = self.irf_min_region_size
+        return clean_regions(mask, min_sizes, irf_open=True)
 
     @torch.no_grad()
     def segment(self, image_np, return_attention=False):
@@ -102,23 +149,12 @@ class HybridInference:
         Returns:
             Mask [H, W] (0=BG, 1=IRF, 2=SRF, 3=PED); with `return_attention`, ``(mask, attention_map)``.
         """
-        pixel_values = self.processor(images=image_np, return_tensors="pt").pixel_values.to(self.device)
-        target_size = image_np.shape[:2]
-
-        base_logits = predict_logits(self.base_model, pixel_values, target_size, self.cfg)
-        base_probs = F.softmax(base_logits, dim=1).squeeze(0).cpu().numpy()
-        expert_logits = predict_logits(self.expert_model, pixel_values, target_size, self.expert_cfg)
-        expert_irf_prob = F.softmax(expert_logits, dim=1).squeeze(0).cpu().numpy()[1]
-
-        mask = self._merge(base_probs, expert_irf_prob)
-
-        # Class-specific minimum sizes keep small expert IRF detections.
-        min_sizes = {c: self.cfg.MIN_REGION_SIZE for c in range(1, self.cfg.NUM_LABELS)}
-        min_sizes[1] = self.irf_min_region_size
-        mask = clean_regions(mask, min_sizes, irf_open=True)
+        base_probs, expert_irf_prob = self.probabilities(image_np)
+        mask = self.postprocess(base_probs, expert_irf_prob)
 
         if not return_attention:
             return mask
+        pixel_values = self.processor(images=image_np, return_tensors="pt").pixel_values.to(self.device)
         att = self.base_model(pixel_values=pixel_values, output_attentions=True).attentions[5]
         spatial_att = torch.mean(torch.mean(att, dim=1), dim=1)
         grid_size = int(np.sqrt(spatial_att.shape[1]))

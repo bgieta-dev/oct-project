@@ -1,8 +1,21 @@
+import os
 import re
 from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 from typing import Tuple, List
+
+SPLIT_NAMES = ("train", "val", "test")
+
+def split_files(cfg, split: str) -> Tuple[List[str], List[str]]:
+    """Sorted (image_paths, mask_paths) of all slices whose patient is in the frozen `split` list."""
+    if split not in SPLIT_NAMES:
+        raise ValueError(f"split must be one of {SPLIT_NAMES}, got {split!r}")
+    pts = set(load_splits(cfg.SPLIT_DIR)[SPLIT_NAMES.index(split)])
+    files = [f for f in sorted(os.listdir(cfg.IMG_DIR)) if patient_of(f) in pts]
+    img_paths = [os.path.join(cfg.IMG_DIR, f) for f in files]
+    mask_paths = [os.path.join(cfg.MASK_DIR, f) for f in files]
+    return img_paths, mask_paths
 
 # Robust Regex Pattern for filename format: {device}_{patient_id}_{slice_id}.<extension> (e.g. .png, .tiff)
 FILENAME_PATTERN = re.compile(r"^(?P<device>[^_]+)_(?P<patient_id>[^_]+)_(?P<slice_id>.+)\.[a-zA-Z0-9]+$")
