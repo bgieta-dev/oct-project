@@ -1,6 +1,6 @@
 # torch must be installed per platform (this host: 2.11.0+rocm7.2; lab machine: CUDA build).
 # See https://pytorch.org/get-started/locally/
-torch==2.11.0
+torch>=2.6.0
 transformers==5.7.0
 albumentations==2.0.8
 numpy==2.4.3
