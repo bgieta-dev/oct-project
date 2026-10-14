@@ -1,0 +1,14 @@
+# Pure-transformer model: RETFound-MAE-OCT ViT-L/16 encoder (Nature 2023) adapted with LoRA,
+# MiT-B0 stages 1-2 as a high-resolution transformer detail branch, SegFormer-style all-MLP decoder.
+# Pipeline (losses, thresholds, TTA, post-processing) inherited from base.yaml.
+base: base.yaml
+ARCH: retfound
+MODEL_NAME: YukunZhou/RETFound_mae_natureOCT   # informational; ARCH selects the code path
+BATCH_SIZE: 8
+ACCUMULATION_STEPS: 4
+LR: 1.0e-04           # decoder + detail branch
+RETFOUND_LORA_LR: 2.0e-04
+EPOCHS: 80
+WARMUP_EPOCHS: 10
+RETFOUND_LORA_RANK: 16
+RETFOUND_DETAIL_BRANCH: true

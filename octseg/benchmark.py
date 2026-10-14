@@ -1,4 +1,4 @@
-"""Inference time and VRAM benchmarking for SegFormer and SwinUNETR 3D models."""
+"""Inference time and VRAM benchmarking for 2D (SegFormer, RETFound) and SwinUNETR 3D models."""
 import argparse
 import logging
 from pathlib import Path
@@ -8,14 +8,13 @@ from typing import Any, Callable, Dict, List, Optional
 import albumentations as A
 import numpy as np
 import torch
-from transformers import SegformerImageProcessor
 import yaml
 
 from octseg.config import Config, load_config, save_config
 from octseg.dataset import OCTDataset
 from octseg.evaluate3d import predict_volume
 from octseg.hybrid_inference import HybridInference
-from octseg.model import load_segformer, load_swin_unetr
+from octseg.model import build_processor, load_2d_model, load_swin_unetr
 from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
 from octseg.runs import make_run_dir, setup_logging
 from octseg.splits import split_files
@@ -137,9 +136,9 @@ def benchmark(
     modes_dict: Dict[str, Any] = {}
     mean_z: Optional[float] = None
 
-    if cfg.ARCH == "segformer":
-        log.info(f"Loading SegFormer model from {model_path}")
-        model = load_segformer(cfg, model_path, output_attentions=False)
+    if cfg.ARCH in ("segformer", "retfound"):
+        log.info(f"Loading {cfg.ARCH} model from {model_path}")
+        model = load_2d_model(cfg, model_path)
         params_m = round(float(sum(p.numel() for p in model.parameters()) / 1e6), 2)
 
         test_imgs, test_masks = split_files(cfg, "test")
@@ -149,7 +148,7 @@ def benchmark(
         slice_count = min(slices, len(test_imgs))
         log.info(f"Preloading {slice_count} test slices into memory...")
 
-        processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
+        processor = build_processor(cfg)
         val_transform = A.Compose([A.Resize(height=cfg.AUG_SIZE[0], width=cfg.AUG_SIZE[1])])
         dataset = OCTDataset(
             test_imgs[:slice_count],
@@ -183,6 +182,8 @@ def benchmark(
 
         # Mode hybrid (if expert provided)
         if expert_cfg is not None and expert_weights_path is not None:
+            if cfg.ARCH != "segformer":
+                raise ValueError("Hybrid benchmark requires ARCH=segformer")
             log.info(f"Initializing HybridInference with expert weights {expert_weights_path}...")
             hybrid_engine = HybridInference(
                 base_model_path=model_path,

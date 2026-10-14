@@ -122,7 +122,7 @@ def test_benchmark_segformer_modes(tmp_path):
     dummy_px = torch.zeros((1, 3, 64, 64))
     dummy_orig = np.zeros((64, 64, 3), dtype=np.uint8)
 
-    with patch("octseg.benchmark.load_segformer", return_value=mock_model), \
+    with patch("octseg.benchmark.load_2d_model", return_value=mock_model), \
          patch("octseg.benchmark.split_files", return_value=(["img1.png", "img2.png"], ["m1.png", "m2.png"])), \
          patch("octseg.benchmark.OCTDataset") as mock_ds_cls, \
          patch("octseg.benchmark.predict_logits", return_value=torch.zeros((1, 4, 64, 64))):
@@ -211,7 +211,7 @@ def test_benchmark_segformer_with_hybrid(tmp_path):
     mock_hybrid = MagicMock()
     mock_hybrid.segment.return_value = np.zeros((64, 64), dtype=np.uint8)
 
-    with patch("octseg.benchmark.load_segformer", return_value=mock_model), \
+    with patch("octseg.benchmark.load_2d_model", return_value=mock_model), \
          patch("octseg.benchmark.split_files", return_value=(["img1.png"], ["m1.png"])), \
          patch("octseg.benchmark.OCTDataset") as mock_ds_cls, \
          patch("octseg.benchmark.predict_logits", return_value=torch.zeros((1, 4, 64, 64))), \

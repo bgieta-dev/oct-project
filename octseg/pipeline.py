@@ -89,8 +89,8 @@ def main():
 
     # PHASE 3: INTERPRETABILITY (ATTENTION MAPS)
     log.info("--- PHASE 3: ATTENTION VISUALIZATION ---")
-    if config.ARCH == "swin_unetr_3d":
-        log.info("Attention maps skipped: ARCH=swin_unetr_3d has no SegFormer attention")
+    if config.ARCH != "segformer":
+        log.info(f"Attention maps skipped: ARCH={config.ARCH} has no SegFormer attention")
     elif training_success:
         try:
             generate_attention_maps(model_path=model_path, output_dir=os.path.join(exp_dir, "attention_maps"), cfg=config)

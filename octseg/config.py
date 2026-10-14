@@ -36,7 +36,7 @@ def get_vram_config(model_name: str) -> Tuple[int, int]:
 @dataclass
 class Config:
     # --- architecture ---
-    ARCH: str = "segformer"  # "segformer" | "swin_unetr_3d"
+    ARCH: str = "segformer"  # "segformer" | "retfound" | "swin_unetr_3d"
     MODEL_NAME: str = "nvidia/mit-b2"
     NUM_LABELS: int = 4
     TARGET_CLASS: Optional[int] = None  # set (e.g. 1) for binary expert models
@@ -109,6 +109,18 @@ class Config:
     SWIN_DROP_PATH: float = 0.1
     SWIN_SW_OVERLAP: float = 0.5
     SWIN_SW_BATCH: int = 4
+
+    # --- RETFound ViT-L/16 + LoRA + MiT detail branch (ARCH: retfound) ---
+    RETFOUND_WEIGHTS: Optional[str] = "YukunZhou/RETFound_mae_natureOCT"  # HF repo id or local .pth; None = random init (tests/smoke only)
+    RETFOUND_TAP_LAYERS: Tuple[int, int, int, int] = (5, 11, 17, 23)
+    RETFOUND_LORA_RANK: int = 16          # 0 = frozen encoder, no LoRA
+    RETFOUND_LORA_ALPHA: int = 32
+    RETFOUND_LORA_DROPOUT: float = 0.1
+    RETFOUND_LORA_LR: float = 2e-4
+    RETFOUND_DECODER_DIM: int = 256
+    RETFOUND_DETAIL_BRANCH: bool = True   # MiT stages 1-2 (stride 4/8 transformer tokens)
+    RETFOUND_DETAIL_MODEL: str = "nvidia/mit-b0"
+    RETFOUND_DROP_PATH: float = 0.1
     def __post_init__(self):
         self.AUG_SIZE = tuple(self.AUG_SIZE)
         self.AUG_SCALE = tuple(self.AUG_SCALE)
@@ -116,9 +128,19 @@ class Config:
             self.SWIN_ROI = tuple(self.SWIN_ROI)
         if isinstance(self.SWIN_VOLUME_SIZE, list):
             self.SWIN_VOLUME_SIZE = tuple(self.SWIN_VOLUME_SIZE)
+        self.RETFOUND_TAP_LAYERS = tuple(self.RETFOUND_TAP_LAYERS)
 
-        if self.ARCH not in ("segformer", "swin_unetr_3d"):
-            raise ValueError(f"Unknown ARCH {self.ARCH!r}; expected 'segformer' or 'swin_unetr_3d'")
+        if self.ARCH not in ("segformer", "retfound", "swin_unetr_3d"):
+            raise ValueError(f"Unknown ARCH {self.ARCH!r}; expected 'segformer', 'retfound' or 'swin_unetr_3d'")
+        if self.ARCH == "retfound":
+            taps = self.RETFOUND_TAP_LAYERS
+            if (len(taps) != 4 or not all(isinstance(t, int) and t >= 0 for t in taps)
+                    or any(a >= b for a, b in zip(taps, taps[1:]))):
+                raise ValueError("RETFOUND_TAP_LAYERS must be 4 strictly increasing non-negative block indices")
+            if self.RETFOUND_LORA_RANK < 0:
+                raise ValueError("RETFOUND_LORA_RANK must be >= 0")
+            if self.TARGET_CLASS is not None:
+                raise ValueError("Target class expert not supported for retfound")
         if self.ARCH == "swin_unetr_3d":
             if any(dim % 32 != 0 for dim in self.SWIN_ROI):
                 raise ValueError("SWIN_ROI dims must be divisible by 32")
@@ -165,6 +187,7 @@ class Config:
         d["AUG_SIZE"], d["AUG_SCALE"] = list(self.AUG_SIZE), list(self.AUG_SCALE)
         d["SWIN_ROI"] = list(self.SWIN_ROI)
         d["SWIN_VOLUME_SIZE"] = list(self.SWIN_VOLUME_SIZE)
+        d["RETFOUND_TAP_LAYERS"] = list(self.RETFOUND_TAP_LAYERS)
         return d
 
 

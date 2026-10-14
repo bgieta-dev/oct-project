@@ -10,12 +10,11 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import SegformerImageProcessor
 
 from octseg.config import Config, load_config, save_config, ROOT
 from octseg.dataset import OCTDataset
 from octseg.metrics import SegmentationMetrics, save_metrics_yaml, slice_mean_iou
-from octseg.model import load_segformer
+from octseg.model import build_processor, load_2d_model
 from octseg.postprocess import apply_thresholds, clean_regions, predict_logits, sharpen_ped
 from octseg.runs import setup_logging
 from octseg.splits import split_files
@@ -40,9 +39,9 @@ def evaluate_model(model_path, output_dir, cfg: Config):
     log.info(f"Dynamic vis indices: {vis_indices}")
 
     # 2. Model Init
-    processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
+    processor = build_processor(cfg)
     log.info(f"Loading weights from {model_path}")
-    model = load_segformer(cfg, model_path, output_attentions=True)
+    model = load_2d_model(cfg, model_path, output_attentions=(cfg.ARCH == "segformer"))
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
 
     # 3. Setup Dataset
@@ -64,12 +63,14 @@ def evaluate_model(model_path, output_dir, cfg: Config):
         orig_img_batch = batch["orig_img"].numpy()
 
         with torch.no_grad():
-            # Encoder block 5 attention for the visualisation grid
-            outputs = model(pixel_values=pixel_values)
-            avg_att = torch.mean(outputs.attentions[5], dim=1)
-            spatial_att = torch.mean(avg_att, dim=1)
-            grid_size = int(np.sqrt(spatial_att.shape[1]))
-            att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
+            att_maps = None
+            if cfg.ARCH == "segformer":
+                # Encoder block 5 attention for the visualisation grid
+                outputs = model(pixel_values=pixel_values)
+                avg_att = torch.mean(outputs.attentions[5], dim=1)
+                spatial_att = torch.mean(avg_att, dim=1)
+                grid_size = int(np.sqrt(spatial_att.shape[1]))
+                att_maps = spatial_att.view(-1, grid_size, grid_size).cpu().numpy()
 
             logits = predict_logits(model, pixel_values, cfg.AUG_SIZE, cfg)
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
@@ -84,7 +85,7 @@ def evaluate_model(model_path, output_dir, cfg: Config):
             orig_img = orig_img_batch[b_idx]
             for c_key, t_idx in vis_indices.items():
                 if global_idx == t_idx:
-                    vis_data[c_key] = (orig_img, labels, pred, att_maps[b_idx])
+                    vis_data[c_key] = (orig_img, labels, pred, att_maps[b_idx] if att_maps is not None else None)
             metrics.update(labels, pred, orig_img)
 
             slice_miou = slice_mean_iou(labels, pred, cfg.NUM_LABELS)

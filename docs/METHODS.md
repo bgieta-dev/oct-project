@@ -56,6 +56,10 @@ tylko w predykcji, są pomijane (tak powstały liczby w pracy). Walidacja podcza
 (kara 100), więc `mHD95` z logu treningu i z końcowej ewaluacji **nie są porównywalne**. Każdy katalog ewaluacji
 zawiera `metrics.yaml` z pełnymi wynikami i użytą polityką.
 
+Uwaga: migawki raportowanych przebiegów test18 i test19 (`experiments/test19/config.py`,
+`git show 4657305:experiments/test18/config.py`) mają `CLASS_THRESHOLDS = {1: 0.30, 2: 0.40, 3: 0.40}`
+i `MIN_REGION_SIZE = 50`, a nie SRF/PED 0,80 i 80 px jak bieżący `configs/base.yaml`.
+
 ## 4. Wnioskowanie hybrydowe (`octseg/hybrid_inference.py`, `evaluate_hybrid.py`)
 
 Model bazowy (B2, 4 klasy) + binarny ekspert IRF (B0, 2 klasy, 2.5D, `configs/irf_expert.yaml`:
@@ -64,11 +68,24 @@ Tversky α = 0,3 / β = 0,7, wagi klas [1; 8]). Oba modele dostają ten sam obra
 * tryb **soft** (domyślny): mapa IRF jest mieszana z mapą eksperta (`linear`, `geometric`, `harmonic`, `max`,
   `min`, `confidence`; waga eksperta 0,4), potem wyostrzenie PED, progi (IRF 0,25) i czyszczenie
   (minimalny region IRF 12 px, SRF/PED 80 px). Domyślnie IRF nie nadpisuje SRF/PED (`irf_override: false`);
-* tryb **hard**: maska bazowa + dodanie IRF tam, gdzie ekspert przekracza próg, wyłącznie nad tłem/IRF.
+* tryb **hard**: maska bazowa + dodanie IRF tam, gdzie ekspert przekracza próg, wyłącznie nad tłem/IRF;
+* tryb **replace** (logika z `IRF_EXPERT_PLAN.md`): z maski bazowej (progi bez nadpisywania przez IRF) zostają SRF
+  i PED, IRF bazy jest usuwany, a IRF eksperta (prawdopodobieństwo > progu eksperta, 0,25 w
+  `configs/irf_expert.yaml`) jest wpisywany tylko na tło. Planowany krok "OR przy pewności eksperta > 0,7" nie
+  wymaga osobnego kodu — próg 0,25 obejmuje już każdy piksel powyżej 0,7.
 
-Wartości domyślne: `configs/hybrid.yaml` (`HYBRID_*`). Domyślna logika w kodzie (miękkie mieszanie
-prawdopodobieństw) różni się od pierwotnego planu z `IRF_EXPERT_PLAN.md` (maska eksperta zastępuje IRF bazy);
-patrz `docs/ROADMAP.md`.
+Wartości domyślne: `configs/hybrid.yaml` (`HYBRID_*`). `HybridInference.segment` = `probabilities` (oba modele,
+raz na przekrój) + `postprocess` (scalenie i czyszczenie; nie modyfikuje wejść), dzięki czemu wiele wariantów
+scalania można ocenić na tych samych prawdopodobieństwach.
+
+**Wybór wariantu na zbiorze walidacyjnym** (`python -m octseg.sweep_hybrid`, domyślnie `--split val`): dla każdego
+przekroju liczony jest wiersz bazowy (łańcuch identyczny z `evaluate_model`) i 14 wariantów: soft `linear` z wagą
+eksperta 0,3 / 0,4 / 0,5 / 0,6 × próg IRF 0,25 / 0,35; soft `confidence` i `max` (waga 0,5) × oba progi; `hard`;
+`replace`. Metryki z polityką HD95 `skip`. Wybierany jest wariant o najwyższym Dice IRF spośród tych, które
+przewyższają Dice IRF modelu bazowego i utrzymują Dice SRF oraz PED nie niżej niż 0,01 poniżej bazy
+(`SRF_PED_TOLERANCE`); przy remisie — pierwszy w kolejności siatki. Wynik: `sweep.yaml` oraz gotowe polecenie
+`evaluate_hybrid` do **jednorazowej** oceny na zbiorze testowym. Jeśli żaden wariant nie spełnia reguły,
+hybryda nie jest przyjmowana i raportowany jest model bazowy.
 
 ## 5. Interpretowalność (`octseg/attention_visualizer.py`)
 
@@ -88,4 +105,67 @@ używają starej nazwy "stage", która oznacza ten sam indeks bloku.
 | Boundary Loss używany | wyłączony |
 | Mapy uwagi z "Stage 2 (64×64)" | indeks bloku enkodera (rozmiar siatki zależy od bloku) |
 | Ekspert IRF: α = 0,05 / β = 0,95 | α = 0,3 / β = 0,7 (`configs/irf_expert.yaml`) |
-| Wyodrębnianie przypadków porażek | nie ma w bieżącym `evaluate.py` (było w `experiments/test10/eval.py`) |
+| Wyodrębnianie przypadków porażek | jest: `save_failure_cases` zapisuje k najgorszych przekrojów (IoU) do `failures/` (2D i 3D) |
+
+## 7. Model czysto transformerowy RETFound-OCT + LoRA (`ARCH: retfound`, `octseg/model.py`)
+
+Pytanie badawcze: samonadzorowane wstępne uczenie transformera na obrazach OCT (domena docelowa) kontra MiT
+uczony na ImageNet, przy identycznym potoku (podział, straty, progi, TTA, czyszczenie, metryki).
+
+* **Enkoder**: ViT-L/16 (timm `VisionTransformer`: łata 16 px, wymiar 1024, 24 bloki, 16 głów, MLP ×4,
+  LayerNorm ε = 1e-6) z wagami RETFound-MAE-OCT (Zhou i in., Nature 2023), repozytorium Hugging Face
+  `YukunZhou/RETFound_mae_natureOCT` (dostęp bramkowany: akceptacja licencji + `HF_TOKEN` w `.env`). Przy
+  wczytywaniu usuwane są prefiksy `backbone.` / `encoder.` i klucze dekodera MAE (`decoder*`, `mask_token`, `head`,
+  `fc_norm`); zanurzenia pozycyjne są interpolowane do siatki wejścia 512×512; brak dowolnego klucza enkodera
+  (poza `norm.*`) przerywa działanie (`RuntimeError`). Wejście jest dopełniane (interpolacją) do wielokrotności
+  16 px, `dynamic_img_size` obsługuje skale TTA 0,8 / 1,2.
+* **Adaptacja LoRA** (peft): wagi enkodera są zamrożone; adaptery rangi r = 16 (α = 32, dropout 0,1) w projekcjach
+  `attn.qkv` i `attn.proj` każdego bloku. W enkoderze trenowane są wyłącznie parametry `lora_*`; enkoder używa
+  gradient checkpointing. AdamW ma dwie grupy: LoRA (lr 2e-4, weight decay 0) oraz gałąź detali + dekoder
+  (lr 1e-4, weight decay 0,05).
+* **Gałąź detali**: dwa pierwsze etapy enkodera MiT-B0 (`nvidia/mit-b0`, wagi ImageNet; krok 4 i 8, 32 i 64
+  kanały, efektywna samouwaga). Odzyskuje drobne cysty IRF, które giną w łatach 16 px ViT; trenowana w całości.
+* **Dekoder All-MLP** (jak w SegFormerze): wyjścia bloków 5, 11, 17, 23 ViT (indeksy od 0,
+  `RETFOUND_TAP_LAYERS`) i dwie mapy gałęzi detali → liniowa projekcja każdego tokenu do 256 kanałów →
+  interpolacja biliniowa do 1/4 rozdzielczości wejścia → konkatenacja → Linear → LayerNorm → GELU → dropout 0,2
+  → Linear do 4 klas. Logity mają krok 4, jak w SegFormerze. Jedyne sploty to osadzenia łat ViT i MiT.
+* Normalizacja wejścia: domyślny `SegformerImageProcessor()` (512×512, średnia/odchylenie ImageNet — te same,
+  których używa RETFound). Pozostałe ustawienia z `configs/base.yaml`; `configs/retfound_lora.yaml`: batch 8 × 4
+  akumulacje, 80 epok, 10 epok rozgrzewki. Mapy uwagi SegFormera nie są generowane (siatka predykcji ma
+  3 kolumny).
+* Ewaluacja nie wymaga tokenu HF: `load_2d_model` buduje model bez pobierania wag RETFound i ściśle wczytuje
+  wytrenowany checkpoint.
+* **Ablacja** (planowane test20–test22, `docs/EXPERIMENTS.md`): pełny model (`retfound_lora.yaml`), bez gałęzi
+  detali (`retfound_lora_nodetail.yaml`), zamrożony enkoder bez LoRA (`retfound_frozen.yaml`, r = 0).
+
+## 8. Natywny model 3D SwinUNETR (`ARCH: swin_unetr_3d`, `volume_data.py`, `train3d.py`, `evaluate3d.py`)
+
+* Model: MONAI 1.6.1 `SwinUNETR` (3D, 1 kanał wejściowy, 4 klasy, `feature_size` 48, drop path 0,1, gradient
+  checkpointing). Opcjonalnie samonadzorowane wagi `model_swinvit.pt` (`SWIN_PRETRAINED`, w
+  `configs/swin_unetr_3d.yaml`: `outputs/pretrained/model_swinvit.pt`; wymagają `feature_size` 48).
+* **Wolumin** = wszystkie B-skany pacjenta uporządkowane numerycznie po indeksie przekroju. Każdy przekrój jest
+  normalizowany percentylowo (1–99) w natywnej rozdzielczości, skalowany do 256×256 (`SWIN_VOLUME_SIZE`; maska
+  metodą najbliższego sąsiada) i zapisywany jako uint8. Wejście jest jednokanałowe — kontekst w osi Z zapewnia
+  splot 3D zamiast stosu 2.5D.
+* **Trening na łatach** 32×160×160 (Z×H×W, `SWIN_ROI`; wymiary podzielne przez 32), 2 łaty na wolumin losowane
+  z równymi proporcjami klas (`RandCropByLabelClassesd`). Augmentacje: odbicie w osi bocznej (W), skalowanie
+  i przesunięcie intensywności (±0,1), szum gaussowski (σ = 0,02). Strata jak w 2D: Focal + Tversky
+  (Tversky działa dla tensorów N-wymiarowych). AdamW (lr 1e-4, weight decay 1e-5), harmonogram cosinusowy
+  z 20 epokami rozgrzewki, 300 epok, batch 1 wolumin, AMP. Walidacja co 10 epok: `argmax`, usuwanie regionów
+  < 80 px bez otwarcia morfologicznego, HD95 `penalty100` (jak w 2D).
+* **Wnioskowanie**: okno przesuwne z wagami gaussowskimi (nakładanie 0,5, 4 okna na partię); TTA 3D to tylko
+  odbicie boczne (`TTA_SCALES` są ignorowane). Logity są interpolowane biliniowo do 512×512 (`AUG_SIZE`) przekrój
+  po przekroju, potem softmax i **ten sam łańcuch co w 2D** (wyostrzenie PED, progi, otwarcie IRF, usuwanie
+  regionów) oraz te same metryki (`skip`) na GT 512×512 — wyniki są porównywalne z modelami 2D.
+* Brak eksperta 3D i Boundary Loss (konfiguracja zgłasza błąd). Model nie był jeszcze trenowany na danych
+  RETOUCH.
+
+## 9. Czas wnioskowania i zużycie VRAM (`octseg/benchmark.py`)
+
+Dane testowe są wczytywane do pamięci przed pomiarem (bez odczytu z dysku); po `--warmup` wywołaniach mierzone jest
+jedno wywołanie na wejście (batch 1, `torch.cuda.synchronize()` wokół pomiaru na GPU): średnia, mediana i p95 w ms
+oraz szczytowa zaalokowana VRAM (`torch.cuda.max_memory_allocated`, brak na CPU). Tryby 2D: `forward` (sam model,
+bez TTA), `pipeline` (TTA + softmax + wyostrzenie PED + progi + czyszczenie), `hybrid` (baza + ekspert). Tryby 3D:
+`volume_forward`, `volume_pipeline`, dodatkowo `ms_per_bscan` = średni czas woluminu / średnia liczba przekrojów.
+Wynik: `outputs/benchmark/<run>/benchmark.yaml`. Szczytowa VRAM treningu jest logowana na końcu każdego treningu
+(`Peak training VRAM: … MB`).

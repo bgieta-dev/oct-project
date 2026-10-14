@@ -1,0 +1,3 @@
+# Ablation: frozen RETFound encoder (no LoRA); detail branch and decoder still train.
+base: retfound_lora.yaml
+RETFOUND_LORA_RANK: 0

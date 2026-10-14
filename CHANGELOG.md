@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **RETFound-OCT + LoRA model** (`ARCH: retfound`, `octseg/model.py`): pure-transformer segmenter — RETFound-MAE-OCT ViT-L/16 encoder (gated HF weights, `HF_TOKEN`) adapted with LoRA on `attn.qkv`/`attn.proj`, MiT-B0 stages 1–2 as a high-resolution detail branch, SegFormer-style all-MLP decoder. Configs `retfound_lora.yaml`, `retfound_lora_nodetail.yaml`, `retfound_frozen.yaml`; `build_2d_model`/`load_2d_model`/`build_processor`/`optimizer_param_groups` shared by train/evaluate/benchmark. New deps `timm==1.0.30`, `peft==0.21.2`.
+- **Sequential experiment runner** (`octseg/run_series.py`, `scripts/run_retfound_ablation.{sh,bat}`): runs configs one by one as consecutive `testN` experiments (`pipeline --promote`), preflights configs and RETFound weights before training, continues after a failed run, stops when `nvidia-smi` reports the GPU lost, writes `experiments/series_<first>-<last>.md` summary, optional `--push`.
+- **SwinUNETR 3D** (`ARCH: swin_unetr_3d`, `monai==1.6.1`, `configs/swin_unetr_3d.yaml`): native volumetric model on whole OCT volumes. `octseg/volume_data.py` (`VolumeRecord`, `group_volumes` with numeric slice order, `load_volume` -> uint8 `[Z,H,W]` after per-slice `normalize_slice` + resize, MONAI `train_transforms_3d` with `RandCropByLabelClassesd` patches), `octseg/train3d.py` (`train_model_3d`: Focal + Tversky on patches, AdamW + cosine warmup, validation every `VAL_INTERVAL` with `penalty100`), `octseg/evaluate3d.py` (`predict_volume`: Gaussian sliding window, optional lateral-flip TTA, softmax upsampled to `AUG_SIZE`; `evaluate_model_3d` applies the 2D post-processing chain per slice). `build_swin_unetr` / `load_swin_unetr` in `model.py` (gradient checkpointing, optional self-supervised `model_swinvit.pt` via `SWIN_PRETRAINED`, strict checkpoint loading). New `SWIN_*` config fields. `train`, `evaluate` and `pipeline` dispatch on `cfg.ARCH`; the attention phase is skipped for non-SegFormer models.
+- **Hybrid `replace` mode** (`octseg/hybrid_inference.py`, `ENSEMBLE_MODES = ("soft", "hard", "replace")`): base SRF/PED kept, base IRF discarded, expert IRF (> expert IRF threshold) written over background only. `HybridInference.segment` split into `probabilities` (both forward passes) and `postprocess` (merge + cleanup, never mutates its inputs); unknown modes raise. `evaluate_hybrid --ensemble-mode` restricted to `ENSEMBLE_MODES`.
+- **Hybrid sweep** (`octseg/sweep_hybrid.py`): runs base + expert once per slice and evaluates 14 merge variants (soft linear w ∈ {0.3, 0.4, 0.5, 0.6} × IRF threshold ∈ {0.25, 0.35}; soft `confidence`/`max` at w = 0.5 × both thresholds; `hard`; `replace`) plus the base row on `--split val` (default). `select_best` picks the highest IRF Dice among variants that beat the base IRF Dice and keep SRF/PED Dice within `SRF_PED_TOLERANCE = 0.01`; writes `sweep.yaml` and logs the exact `evaluate_hybrid` test command or "hybrid not adopted".
+- **Inference benchmark** (`octseg/benchmark.py`): per-call latency (mean/median/p95 ms, CUDA-synchronised) and peak VRAM; modes `forward`, `pipeline` (TTA + post-processing), `hybrid` (with `--expert-config/--expert-weights`) for 2D models, `volume_forward`/`volume_pipeline` with `ms_per_bscan` for SwinUNETR 3D. `--device cpu|cuda`, `--threads`; writes `outputs/benchmark/<run>/benchmark.yaml`.
+- **Experiment auto-numbering** (`octseg/runs.py`): `get_next_experiment_name` returns `test<N+1>`, N = highest `testN` in the `docs/EXPERIMENTS.md` index or among `experiments/testN*` directories; `promote_run_to_experiment` copies a run into `experiments/<name>` without `*.pth`/`*.pt`. `python -m octseg.pipeline --promote` uses the next free name when `--name` is not given and promotes at the end; `scripts/run.sh` / `run.bat` pass `--promote`.
+- **Git sync scripts** `git_update.sh` / `git_update.bat` (repo root, wrappers in `scripts/`): `git add .`, commit (message = first argument, default `chore: sync main repo`), `pull --rebase`, push; the rebase is aborted on conflict.
+- **Windows GPU recovery** `recover_gpu.ps1` / `recover_gpu.bat` (repo root, wrappers in `scripts/`) for `nvidia-smi` "GPU is lost": self-elevates, kills python processes, restarts the NVIDIA container services, restarts/power-cycles the PnP display device, checks `nvidia-smi`, offers a reboot (`-ForceRebootOnFailure` reboots without asking).
+
+### Changed
+- `split_files(cfg, split)` / `SPLIT_NAMES` (`octseg/splits.py`) replace the duplicated split listing in `train`, `evaluate`, `evaluate_hybrid`, `attention_visualizer`; `distribute_files` removed.
+- `Config`: `ARCH` (`segformer` | `retfound` | `swin_unetr_3d`, validated), `DEVICE_OVERRIDE`, `WEIGHT_DECAY` (0.05, previously hard-coded; behaviour unchanged).
+- `TverskyLoss` works on N-D inputs (`[B,C,H,W]` and `[B,C,D,H,W]`).
+- `slice_mean_iou` (`octseg/metrics.py`) shared by 2D/3D failure-case selection; `normalize_slice` is a module-level function in `octseg/dataset.py` (same math).
+- `save_predictions_grid` draws 3 columns when no attention map is given.
+- Training logs `Peak training VRAM: <MB>` at the end (2D and 3D).
+- `train_expert`, `evaluate_hybrid`, `sweep_hybrid`, `attention_visualizer` raise `ValueError` unless `ARCH=segformer`.
+
+### Docs
+- test19 (SegFormer-B2 base) added to the `docs/EXPERIMENTS.md` index; planned RETFound ablation test20–22; `docs/METHODS.md` sections on RETFound + LoRA, SwinUNETR 3D and the hybrid selection on val; `docs/ROADMAP.md` status of the vacation items.
+
 ## [2.1.0] - 2026-10-03
 
 ### Added

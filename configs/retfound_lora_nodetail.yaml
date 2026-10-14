@@ -1,0 +1,3 @@
+# Ablation: RETFound + LoRA without the MiT detail branch (ViT taps only).
+base: retfound_lora.yaml
+RETFOUND_DETAIL_BRANCH: false

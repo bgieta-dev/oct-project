@@ -45,3 +45,24 @@ def test_swin_unetr_config_yaml_roundtrip(tmp_path):
     loaded = load_config(out_yaml)
     assert loaded.SWIN_ROI == (32, 160, 160)
     assert isinstance(loaded.SWIN_ROI, tuple)
+
+
+@pytest.mark.parametrize("taps", [(5, 5, 17, 23), (5, 11, 17)])
+def test_retfound_bad_tap_layers_raise(taps):
+    with pytest.raises(ValueError, match="RETFOUND_TAP_LAYERS"):
+        Config(ARCH="retfound", RETFOUND_TAP_LAYERS=taps)
+
+
+def test_retfound_negative_lora_rank_raises():
+    with pytest.raises(ValueError, match="RETFOUND_LORA_RANK"):
+        Config(ARCH="retfound", RETFOUND_LORA_RANK=-1)
+
+
+def test_retfound_config_yaml_roundtrip(tmp_path):
+    cfg = Config(ARCH="retfound", RETFOUND_TAP_LAYERS=(3, 7, 11, 15), RETFOUND_LORA_RANK=0)
+    out_yaml = tmp_path / "retfound.yaml"
+    save_config(cfg, out_yaml)
+    loaded = load_config(out_yaml)
+    assert loaded == cfg
+    assert loaded.RETFOUND_TAP_LAYERS == (3, 7, 11, 15)
+    assert isinstance(loaded.RETFOUND_TAP_LAYERS, tuple)

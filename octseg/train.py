@@ -9,12 +9,13 @@ import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor, get_cosine_schedule_with_warmup
+from transformers import get_cosine_schedule_with_warmup
 
 from octseg.config import Config, load_config, save_config
 from octseg.dataset import OCTDataset
 from octseg.losses import BoundaryLoss, FocalLoss, TverskyLoss
 from octseg.metrics import SegmentationMetrics
+from octseg.model import build_2d_model, build_processor, optimizer_param_groups
 from octseg.postprocess import clean_regions
 from octseg.splits import split_files
 from octseg.viz import plot_history
@@ -83,7 +84,7 @@ def validate(model, val_loader, cfg):
 
 
 def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
-    """Trains a SegFormer and keeps the checkpoint with the best validation mIoU.
+    """Trains a 2D model (SegFormer or RETFound) and keeps the checkpoint with the best validation mIoU.
 
     Args:
         output_dir: run directory (receives metrics.png and, by default, best_model.pth).
@@ -116,8 +117,7 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
 
     val_transform = A.Compose([A.Resize(height=cfg.AUG_SIZE[0], width=cfg.AUG_SIZE[1])])
 
-    processor = SegformerImageProcessor.from_pretrained(cfg.MODEL_NAME)
-    processor.do_reduce_labels = False
+    processor = build_processor(cfg)
 
     train_ds = OCTDataset(train_imgs, train_masks, processor, transform=train_transform, cfg=cfg)
     val_ds = OCTDataset(val_imgs, val_masks, processor, transform=val_transform, cfg=cfg)
@@ -127,14 +127,9 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
                               generator=generator, worker_init_fn=_seed_worker)
     val_loader = DataLoader(val_ds, batch_size=cfg.BATCH_SIZE, num_workers=2, pin_memory=True)
 
-    model = SegformerForSemanticSegmentation.from_pretrained(
-        cfg.MODEL_NAME, num_labels=cfg.NUM_LABELS, ignore_mismatched_sizes=True,
-        hidden_dropout_prob=cfg.DROPOUT_RATE,
-        attention_probs_dropout_prob=cfg.DROPOUT_RATE,
-        classifier_dropout_prob=cfg.DROPOUT_RATE,
-    ).to(cfg.DEVICE)
+    model = build_2d_model(cfg).to(cfg.DEVICE)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.LR, weight_decay=cfg.WEIGHT_DECAY)
+    optimizer = torch.optim.AdamW(optimizer_param_groups(model, cfg), lr=cfg.LR, weight_decay=cfg.WEIGHT_DECAY)
     scheduler = get_cosine_schedule_with_warmup(
         optimizer, num_warmup_steps=cfg.WARMUP_EPOCHS, num_training_steps=epochs
     )
@@ -204,7 +199,7 @@ def main():
     """Training only (no evaluation); `python -m octseg.pipeline` runs the full train/eval/attention pipeline."""
     import argparse
     from octseg.runs import make_run_dir, setup_logging
-    parser = argparse.ArgumentParser(description="Train a SegFormer (training only)")
+    parser = argparse.ArgumentParser(description="Train a segmentation model (training only)")
     parser.add_argument("--config", default=None, help="YAML config (default: configs/base.yaml)")
     parser.add_argument("--output", default=None, help="Run directory (default: outputs/runs/<timestamp>_<name>)")
     parser.add_argument("--name", default="train", help="Run name suffix")

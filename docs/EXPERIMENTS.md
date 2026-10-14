@@ -1,8 +1,11 @@
 # Experiments
 
-Frozen history of the SegFormer runs lives in `experiments/` (`test2` … `test18`, plus `legacy_root/` with
-old root-level leftovers). Those folders are evidence: their code snapshots use the old flat imports and are
-**never edited or refactored**. They are excluded from ruff/pytest (`pyproject.toml`).
+Frozen history of the SegFormer runs: `test2` … `test18` and `test19` (plus `experiments/legacy_root/` with old
+root-level leftovers). Those snapshots are evidence: their code uses the old flat imports and is **never edited or
+refactored**. They are excluded from ruff/pytest (`pyproject.toml`). Commit `0851b69` ("test19") removed
+`experiments/test2` … `test18` from the working tree; the last committed version of all of them is in commit
+`4657305` (`git show 4657305:experiments/test18/experiment.log`, `git checkout 4657305 -- experiments/test18`).
+Only `test19` and `legacy_root/` are currently tracked.
 
 ## Index
 
@@ -28,24 +31,82 @@ Final numbers come from the `experiment.log` of each run (the first log line kee
 | test16 | run_2026-06-06_07-58-47 | mit-b2 | 0.7037 / 0.8169 (first "Final" line) |
 | test17 | run_2026-06-06_21-26-47 | mit-b3 | — (no "Final mIoU" line) |
 | test18 | run_2026-06-08_10-31-03 | mit-b2 | 0.6990 / 0.8118 |
+| test19 | run_2026-06-18_22-22-31 | mit-b2 | 0.7029 / 0.8150 (base only; expert/hybrid not run) |
 
-No SegFormer checkpoint (`*.pth`) exists in this repository (they are gitignored). test11-gold and test18 can
-only be re-evaluated on the lab machine that holds them.
+No SegFormer checkpoint (`*.pth`) exists in this repository (they are gitignored). test11-gold, test18 and test19
+can only be re-evaluated on the lab machine that holds them.
 
 ## New runs and promotion to history
 
 New runs are written to `outputs/runs/<timestamp>_<name>/` (gitignored) by `python -m octseg.pipeline` /
 `python -m octseg.train_expert`. Each run directory contains `config.yaml` (resolved config), `git.txt`
 (commit + `git status --porcelain`), `src/` (code snapshot), `requirements.txt`, `splits/`, `experiment.log`,
-`metrics.yaml`, `predictions.png`, `metrics.png`, `attention_maps/` and `best_model.pth`.
+`metrics.yaml`, `predictions.png`, `metrics.png`, `attention_maps/` (SegFormer only) and `best_model.pth`.
 
-To promote a run to history (no script, by hand):
+Promotion is automatic with `python -m octseg.pipeline --promote` (used by `scripts/run.sh` / `scripts/run.bat`
+and by `python -m octseg.run_series`):
+
+* without `--name`, the run is named by `octseg.runs.get_next_experiment_name()`: `test<N+1>`, where N is the
+  highest `testN` found in this file's index table (rows starting with `| testN`) **or** among `experiments/testN*`
+  directories (a promoted but not yet indexed run still counts). With `--name foo` the run is promoted to
+  `experiments/foo`;
+* after evaluation and archiving, `promote_run_to_experiment` copies the run directory to `experiments/<name>/`
+  without `*.pth` / `*.pt` (and `__pycache__`).
+
+Then add a row to the index table above. Keep the checkpoint outside git (lab disk) and note its path here. Planned
+runs must **not** be written as `| testN` table rows before they exist: the auto-numbering would skip their numbers.
+
+Manual promotion of an older run (Windows: `robocopy <run> experiments\<name> /E /XF *.pth *.pt`):
 
 ```bash
-rsync -a --exclude '*.pth' outputs/runs/<run>/ experiments/test19-<slug>/
+rsync -a --exclude '*.pth' --exclude '*.pt' outputs/runs/<run>/ experiments/<name>/
 ```
 
-then add a row to the index table above. Keep the checkpoint outside git (lab disk) and note its path here.
+`python -m octseg.run_series --configs a.yaml b.yaml …` runs several configs one after another as consecutive
+`testN` experiments and writes the summary table to `experiments/series_<first>-<last>.md`.
+
+## test19 — SegFormer-B2 base (2026-06-18, lab machine)
+
+Source: `experiments/test19/experiment.log` (old flat-import pipeline, NVIDIA GeForce RTX 3060, 12 GB;
+original run directory `experiments\run_2026-06-18_22-22-31` on the lab machine, which also holds `best_model.pth`).
+Snapshot `config.py`: `nvidia/mit-b2`, 2.5D, LR 5e-5, 80 epochs, 15 warm-up epochs, dropout 0.2, Focal (γ = 3,
+dynamic weights) + Tversky (α = 0.1, β = 0.9), Boundary Loss off, TTA scales 0.8 / 1.0 / 1.2,
+`CLASS_THRESHOLDS = {1: 0.30, 2: 0.40, 3: 0.40}`, `MIN_REGION_SIZE = 50` (the current `configs/base.yaml` uses
+SRF/PED 0.80 and 80 px).
+
+**Test split (674 slices), HD95 policy `skip`:** mIoU **0.7029** | mDice **0.8150** | mHD95 **73.75** |
+mASD **25.62** | parameters 27.35 M
+
+| class | IoU | Dice | HD95 | ASD | regions GT / pred |
+|---|---|---|---|---|---|
+| IRF (1) | 0.5335 | 0.6958 | 50.14 | 10.90 | 8.9 / 4.5 |
+| SRF (2) | 0.6981 | 0.8222 | 94.33 | 37.60 | 1.3 / 1.5 |
+| PED (3) | 0.6082 | 0.7564 | 76.77 | 28.37 | 1.3 / 1.6 |
+
+**Training (validation, HD95 policy `penalty100`):** best val mIoU **0.7261** at epoch 69 (checkpoint kept);
+val mIoU stays between 0.7039 and 0.7261 from epoch 52 on, i.e. the curve plateaus after ~epoch 55 (epoch 80:
+0.7231). Compared with test18 (0.6990 / 0.8118) the base is +0.0039 mIoU; IRF stays the weakest class
+(Dice 0.6958, under-segmented: 4.5 predicted vs 8.9 GT regions per slice).
+
+**Not run yet:** the IRF expert (`python -m octseg.train_expert`) and the hybrid. The merge variant is to be chosen
+on the validation split with `python -m octseg.sweep_hybrid` and reported once on test (see `docs/ROADMAP.md`).
+
+## Planned: RETFound-OCT + LoRA ablation (test20–test22, no results yet)
+
+Pure-transformer `ARCH: retfound` model (see `docs/METHODS.md` §7), compared against test19 under the identical
+pipeline (splits, losses, thresholds, TTA, post-processing, metrics). Run all three with
+`scripts/run_retfound_ablation.sh` (`.bat` on Windows) — they get the next three free `testN` numbers
+(test20, test21, test22 if no other run is promoted first):
+
+* planned test20 — `configs/retfound_lora.yaml`: RETFound-OCT ViT-L/16, LoRA r = 16, MiT-B0 detail branch;
+* planned test21 — `configs/retfound_lora_nodetail.yaml`: LoRA r = 16, no detail branch (ablation of the branch);
+* planned test22 — `configs/retfound_frozen.yaml`: frozen encoder (`RETFOUND_LORA_RANK: 0`), detail branch on
+  (ablation of LoRA).
+
+Baseline: test19 mIoU 0.7029, IRF Dice 0.6958. Prerequisite: access to the gated Hugging Face repo
+`YukunZhou/RETFound_mae_natureOCT` and `HF_TOKEN` in `.env`. Status: the user's token is valid, but access to the
+repo has not been granted yet (HTTP 403), so none of the three runs has started. `run_series` preflights the
+weights before training, so the series stops within seconds while access is missing.
 
 ## Experimental history (moved verbatim from the old README)
 
