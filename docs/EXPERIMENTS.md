@@ -104,9 +104,9 @@ pipeline (splits, losses, thresholds, TTA, post-processing, metrics). Run all th
   (ablation of LoRA).
 
 Baseline: test19 mIoU 0.7029, IRF Dice 0.6958. Prerequisite: access to the gated Hugging Face repo
-`YukunZhou/RETFound_mae_natureOCT` and `HF_TOKEN` in `.env`. Status: the user's token is valid, but access to the
-repo has not been granted yet (HTTP 403), so none of the three runs has started. `run_series` preflights the
-weights before training, so the series stops within seconds while access is missing.
+`YukunZhou/RETFound_mae_natureOCT` and `HF_TOKEN` in `.env`. Status: access granted (2026-10-14); the checkpoint
+loads into the encoder with no missing keys (294 tensors, 306.0M params, 1.89M trainable in the frozen variant).
+The three runs have not started yet. `run_series` preflights the weights before training.
 
 ## Experimental history (moved verbatim from the old README)
 

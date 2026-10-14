@@ -15,7 +15,7 @@ RTX 3060 machine.
 | Test19 IRF expert + hybrid (`replace` mode, `sweep_hybrid` selection on val) | done | pending |
 | Inference time / VRAM benchmark (`octseg.benchmark`) | done | pending |
 | Native 3D SwinUNETR (`configs/swin_unetr_3d.yaml`) | done | pending |
-| RETFound-OCT + LoRA ablation (planned test20–22) | done | blocked: HF access to `YukunZhou/RETFound_mae_natureOCT` not granted yet (403) |
+| RETFound-OCT + LoRA ablation (planned test20–22) | done | pending: HF access granted, weights verified; run `scripts\run_retfound_ablation.bat` |
 | More training data (`Maksymilian.tex`) | out of scope | — |
 
 ## Test 19: IRF expert + hybrid evaluation (next run)
