@@ -103,23 +103,17 @@ def archive_experiment_sources(run_dir):
         log.error(traceback.format_exc())
 
 
-def get_next_experiment_name(experiments_md_path=None) -> str:
-    """Returns the next experiment name (e.g. 'test19') based on docs/EXPERIMENTS.md."""
+def get_next_experiment_name(experiments_md_path=None, experiments_dir=None) -> str:
+    """Next free experiment name: test<N+1>, N = highest testN in the docs/EXPERIMENTS.md index
+    or among existing experiments/ directories (a promoted but not yet indexed run still counts)."""
     md_path = Path(experiments_md_path) if experiments_md_path else ROOT / "docs" / "EXPERIMENTS.md"
-    max_num = 0
+    exp_dir = Path(experiments_dir) if experiments_dir else ROOT / "experiments"
+    numbers = [0]
     if md_path.exists():
-        text = md_path.read_text(encoding="utf-8")
-        matches = re.findall(r"\|\s*test(\d+)\b", text)
-        if matches:
-            max_num = max(int(m) for m in matches)
-    if max_num == 0:
-        exp_dir = ROOT / "experiments"
-        if exp_dir.exists():
-            for entry in exp_dir.iterdir():
-                m = re.match(r"^test(\d+)", entry.name)
-                if m:
-                    max_num = max(max_num, int(m.group(1)))
-    return f"test{max_num + 1}"
+        numbers += [int(m) for m in re.findall(r"\|\s*test(\d+)\b", md_path.read_text(encoding="utf-8"))]
+    if exp_dir.exists():
+        numbers += [int(m.group(1)) for e in exp_dir.iterdir() if (m := re.match(r"^test(\d+)", e.name))]
+    return f"test{max(numbers) + 1}"
 
 
 def promote_run_to_experiment(run_dir: Union[str, Path], exp_name: str) -> Path:

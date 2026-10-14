@@ -31,17 +31,18 @@ def test_send_discord_notification_without_webhook(monkeypatch):
     send_discord_notification("Testing notification")
 
 
-def test_get_next_experiment_name_current():
-    next_name = get_next_experiment_name()
-    assert next_name == "test19"
+def test_next_experiment_name_uses_index_max(tmp_path):
+    md = tmp_path / "EXPERIMENTS.md"
+    md.write_text("| dir | original run |\n| test5 | run1 |\n| test14 | run2 |\n")
+    assert get_next_experiment_name(md, tmp_path / "experiments") == "test15"
 
 
-def test_get_next_experiment_name_custom(tmp_path):
-    dummy_md = tmp_path / "EXPERIMENTS.md"
-    dummy_md.write_text(
-        "| dir | original run |\n| test5 | run1 |\n| test14 | run2 |\n"
-    )
-    assert get_next_experiment_name(dummy_md) == "test15"
+def test_next_experiment_name_skips_promoted_unindexed_dir(tmp_path):
+    md = tmp_path / "EXPERIMENTS.md"
+    md.write_text("| test18 | run |\n")
+    (tmp_path / "experiments" / "test19").mkdir(parents=True)
+    (tmp_path / "experiments" / "legacy_root").mkdir()
+    assert get_next_experiment_name(md, tmp_path / "experiments") == "test20"
 
 
 def test_promote_run_to_experiment_excludes_checkpoints(tmp_path, monkeypatch):
