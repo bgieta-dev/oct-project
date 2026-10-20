@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guardrails:
+    name: Lint, secrets, hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.4"
+      - name: Ruff blocking rules
+        run: uvx ruff check .
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    name: CPU Tests (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.4"
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+      - name: Install dependencies (CPU PyTorch)
+        run: |
+          uv venv --python 3.13 .venv
+          uv pip install --python .venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu torch torchvision
+          uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt
+      - name: Run unit tests
+        run: |
+          CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= .venv/bin/pytest -v

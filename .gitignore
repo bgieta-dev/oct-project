@@ -299,3 +299,4 @@ docs/thesis/CNN/
 docs/thesis/TRANSFORMERS/
 /analysis/external_roche/
 docs/thesis/*.pdf
+.ruff_cache/

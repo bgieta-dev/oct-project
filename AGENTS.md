@@ -42,3 +42,11 @@ Data: `data_folder/cropped_images/` + `data_folder/cropped_masks/`, names `{devi
 - Ruff excludes `experiments`, `docs/thesis`, `analysis`, `venv` (see `pyproject.toml`); pytest `testpaths = ["tests"]`.
 - Reported results come from the old `experiments/test*/` snapshots on the lab machine (test2..test19), not this refactored package.
 - Docs: `CHANGELOG.md` and `ORGANIZATION_PLAN.md` exist at repo root.
+
+## Guardrails
+- Tooling: Python 3.13 (`.python-version`). `uv` preferred: `uv venv --python 3.13 venv && uv pip install -r requirements.txt -r requirements-dev.txt`.
+- Quality gate: `ruff check .` (blocking set in `pyproject.toml` is clean 0 errors). Touched files must also be clean under strict set.
+- Local pre-commit: `uv tool run pre-commit run --all-files`.
+- Verification: Deterministic playbook at `.omp/skills/verify/SKILL.md` (`skill://verify`).
+- Invariants: Never commit `*.pth`/`*.pt` checkpoints; never commit `.env` with real credentials; unit tests run CPU-only on synthetic data; external calls require explicit timeouts.
+- Rules reference: `.omp/rules/engineering-guardrails.md`.

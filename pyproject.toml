@@ -1,5 +1,49 @@
 [tool.ruff]
+target-version = "py313"
+line-length = 88
 extend-exclude = ["experiments", "docs/thesis", "analysis", "venv"]
+
+[tool.ruff.lint]
+select = [
+    "E9",
+    "E711",
+    "E712",
+    "E713",
+    "E714",
+    "E721",
+    "E722",
+    "F",
+    "B",
+    "YTT",
+    "ASYNC",
+    "T10",
+    "EXE",
+    "PIE",
+    "PGH",
+    "PLE",
+    "W605",
+    "S103",
+    "S104",
+    "S105",
+    "S106",
+    "S107",
+    "S108",
+    "S602",
+    "S604",
+    "S605",
+    "S608",
+]
+ignore = [
+    "F401",  # unused imports in existing code; enforced on touched files
+    "B905",  # zip() without explicit strict=; enforced on touched files
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101"]  # asserts allowed in tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
