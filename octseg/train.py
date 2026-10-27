@@ -15,7 +15,8 @@ from octseg.config import Config, load_config, save_config
 from octseg.dataset import OCTDataset
 from octseg.losses import BoundaryLoss, FocalLoss, TverskyLoss
 from octseg.metrics import SegmentationMetrics
-from octseg.model import build_2d_model, build_processor, optimizer_param_groups
+from octseg.model import build_2d_model, build_processor
+from octseg.optim import build_optimizer
 from octseg.postprocess import clean_regions
 from octseg.splits import split_files
 from octseg.viz import plot_history
@@ -129,7 +130,7 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
 
     model = build_2d_model(cfg).to(cfg.DEVICE)
 
-    optimizer = torch.optim.AdamW(optimizer_param_groups(model, cfg), lr=cfg.LR, weight_decay=cfg.WEIGHT_DECAY)
+    optimizer, sam = build_optimizer(model, cfg)
     scheduler = get_cosine_schedule_with_warmup(
         optimizer, num_warmup_steps=cfg.WARMUP_EPOCHS, num_training_steps=epochs
     )
@@ -150,31 +151,68 @@ def train_model(output_dir, cfg: Config, epochs=None, save_path=None):
         for i, batch in enumerate(pbar):
             pixel_values = batch["pixel_values"].to(cfg.DEVICE)
             labels = batch["labels"].to(cfg.DEVICE)
-            with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
-                outputs = model(pixel_values=pixel_values)
-                logits = F.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+            if sam is not None:
+                optimizer.zero_grad()
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    outputs1 = model(pixel_values=pixel_values)
+                    logits1 = F.interpolate(outputs1.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+                    main_loss1 = cfg.FOCAL_WEIGHT * focal_criterion(logits1, labels)
+                    aux_loss1 = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss1 += cfg.TVERSKY_WEIGHT * tversky_criterion(logits1, labels)
+                    if cfg.USE_BOUNDARY_LOSS:
+                        b_alpha = cfg.BOUNDARY_ALPHA
+                        b_w = min(b_alpha, (b_alpha / 10.0) + (epoch * (b_alpha / 40.0)))
+                        aux_loss1 += b_w * boundary_criterion(F.softmax(logits1, dim=1), labels)
+                    loss1 = main_loss1 + aux_loss1
+                scaler.scale(loss1).backward()
+                sam.first_step(zero_grad=True)
 
-                main_loss = cfg.FOCAL_WEIGHT * focal_criterion(logits, labels)
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    outputs2 = model(pixel_values=pixel_values)
+                    logits2 = F.interpolate(outputs2.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+                    main_loss2 = cfg.FOCAL_WEIGHT * focal_criterion(logits2, labels)
+                    aux_loss2 = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss2 += cfg.TVERSKY_WEIGHT * tversky_criterion(logits2, labels)
+                    if cfg.USE_BOUNDARY_LOSS:
+                        b_alpha = cfg.BOUNDARY_ALPHA
+                        b_w = min(b_alpha, (b_alpha / 10.0) + (epoch * (b_alpha / 40.0)))
+                        aux_loss2 += b_w * boundary_criterion(F.softmax(logits2, dim=1), labels)
+                    loss2 = (main_loss2 + aux_loss2) / cfg.ACCUMULATION_STEPS
+                scaler.scale(loss2).backward()
+                sam.restore()
 
-                aux_loss = 0.0
-                if cfg.USE_TVERSKY:
-                    aux_loss += cfg.TVERSKY_WEIGHT * tversky_criterion(logits, labels)
+                if cfg.ACCUMULATION_STEPS > 1:
+                    sam.accumulate_pass2()
 
-                if cfg.USE_BOUNDARY_LOSS:
-                    b_alpha = cfg.BOUNDARY_ALPHA
-                    b_w = min(b_alpha, (b_alpha / 10.0) + (epoch * (b_alpha / 40.0)))
-                    aux_loss += b_w * boundary_criterion(F.softmax(logits, dim=1), labels)
+                step_loss = loss2.item() * cfg.ACCUMULATION_STEPS
+            else:
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    outputs = model(pixel_values=pixel_values)
+                    logits = F.interpolate(outputs.logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+                    main_loss = cfg.FOCAL_WEIGHT * focal_criterion(logits, labels)
+                    aux_loss = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss += cfg.TVERSKY_WEIGHT * tversky_criterion(logits, labels)
+                    if cfg.USE_BOUNDARY_LOSS:
+                        b_alpha = cfg.BOUNDARY_ALPHA
+                        b_w = min(b_alpha, (b_alpha / 10.0) + (epoch * (b_alpha / 40.0)))
+                        aux_loss += b_w * boundary_criterion(F.softmax(logits, dim=1), labels)
+                    loss = (main_loss + aux_loss) / cfg.ACCUMULATION_STEPS
+                scaler.scale(loss).backward()
+                step_loss = loss.item() * cfg.ACCUMULATION_STEPS
 
-                loss = (main_loss + aux_loss) / cfg.ACCUMULATION_STEPS
-            scaler.scale(loss).backward()
             if (i + 1) % cfg.ACCUMULATION_STEPS == 0:
+                if sam is not None and cfg.ACCUMULATION_STEPS > 1:
+                    sam.flush_accumulated()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-            epoch_loss += loss.item() * cfg.ACCUMULATION_STEPS
-            pbar.set_postfix({"loss": f"{loss.item() * cfg.ACCUMULATION_STEPS:.4f}"})
+            epoch_loss += step_loss
+            pbar.set_postfix({"loss": f"{step_loss:.4f}"})
 
         scheduler.step()
 

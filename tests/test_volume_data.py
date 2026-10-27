@@ -93,7 +93,7 @@ def test_predict_volume_and_validate_3d():
         AUG_SIZE=(64, 64),
         USE_AMP=False,
     )
-    model = build_swin_unetr(cfg, pretrained=False)
+    model = build_swin_unetr(cfg, pretrained=False).to(cfg.DEVICE)
     vol_u8 = np.random.randint(0, 255, (32, 64, 64), dtype=np.uint8)
     mask_u8 = np.random.randint(0, 4, (32, 64, 64), dtype=np.uint8)
 

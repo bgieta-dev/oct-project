@@ -54,6 +54,9 @@ class Config:
     DROPOUT_RATE: float = 0.2
     BATCH_SIZE: Optional[int] = None  # derived from MODEL_NAME when None
     ACCUMULATION_STEPS: Optional[int] = None  # derived from MODEL_NAME when None
+    USE_SAM: bool = False
+    SAM_RHO: float = 0.05
+    SAM_ADAPTIVE: bool = False
 
     # --- loss ---
     USE_DYNAMIC_WEIGHTS: bool = True
@@ -157,6 +160,9 @@ class Config:
                 self.BATCH_SIZE = batch_size
             if self.ACCUMULATION_STEPS is None:
                 self.ACCUMULATION_STEPS = accum_steps
+
+        if self.SAM_RHO < 0.0:
+            raise ValueError(f"SAM_RHO must be >= 0, got {self.SAM_RHO}")
     # --- runtime-resolved values (never serialised) ---
     @property
     def DEVICE(self) -> torch.device:

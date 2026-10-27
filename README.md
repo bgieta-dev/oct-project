@@ -34,7 +34,7 @@ octseg/            importable package (run modules with `python -m octseg.<modul
   dataset.py         2.5D patient-aware loader           losses.py        Focal / Tversky / Boundary
   postprocess.py     TTA, thresholds, region cleanup     metrics.py       IoU/Dice/HD95/ASD, HD95 policy
   train.py           2D training loop                    evaluate.py      test-set evaluation
-  model.py           SegFormer / RETFound+LoRA / SwinUNETR builders, strict checkpoint loading
+  optim.py           SAM optimizer + AdamW builder       model.py         SegFormer / RETFound+LoRA / SwinUNETR
   hybrid_inference.py  base + IRF expert ensemble        evaluate_hybrid.py
   sweep_hybrid.py    hybrid merge-variant selection on val
   volume_data.py     3D volumes + MONAI transforms       train3d.py, evaluate3d.py   SwinUNETR 3D
@@ -43,7 +43,7 @@ octseg/            importable package (run modules with `python -m octseg.<modul
   pipeline.py        train -> eval -> attention -> snapshot [-> experiments/testN]
   run_series.py      several configs as consecutive testN experiments
   train_expert.py    binary IRF expert
-configs/           base.yaml, irf_expert.yaml, hybrid.yaml, swin_unetr_3d.yaml,
+configs/           base.yaml, sam_adamw.yaml, irf_expert.yaml, hybrid.yaml, swin_unetr_3d.yaml,
                    retfound_lora.yaml, retfound_lora_nodetail.yaml, retfound_frozen.yaml
 splits/            train/val/test patient lists (frozen, seed 42)
 tests/             pytest (synthetic data, CPU, seconds)

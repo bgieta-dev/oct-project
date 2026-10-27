@@ -22,6 +22,7 @@ nabłonka barwnikowego).
   Mniejsze modele (B0) i większe (B3) wybiera się w YAML-u; rozmiar batcha wynika z backbone'u
   (B2/B3: 8 × 4 akumulacje, B0/B1: 16 × 2; efektywny batch = 32).
 * Optymalizator **AdamW**, `lr = 5e-5`, `weight_decay = 5e-2`, przycinanie gradientu do normy 1,0, AMP.
+* Opcjonalna regularyzacja geometrii funkcji straty: **SAM (Sharpness-Aware Minimization)** (Foret et al., 2021) z bazowym optymalizatorem AdamW (`configs/sam_adamw.yaml`, `USE_SAM: true`, domyślny promień $\rho = 0{,}05$). Minimalizuje jednocześnie wartość funkcji straty oraz jej lokalną ostrość (krzywiznę / ślad hesjanu): $\min_w \max_{\|\epsilon\|_2 \le \rho} \mathcal{L}(w + \epsilon)$. Chroni mechanizmy uwagi (self-attention) przed nadmiernym dopasowaniem do artefaktów pojedynczych skanerów (Cirrus / Spectralis / Topcon) na małej kohorcie (56 pacjentów). W pełni kompatybilny z AMP GradScaler i akumulacją gradientów (`octseg/optim.py`).
 * Harmonogram: **cosinusowy z rozgrzewką** (`get_cosine_schedule_with_warmup`, 15 epok rozgrzewki, krok po epoce),
   80 epok.
 * Funkcja straty: `0,5 · Focal (γ = 3, wagi klas dynamiczne) + 0,5 · Tversky (α = 0,1, β = 0,9)`

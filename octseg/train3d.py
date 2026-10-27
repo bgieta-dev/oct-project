@@ -13,6 +13,7 @@ from octseg.evaluate3d import predict_volume
 from octseg.losses import FocalLoss, TverskyLoss
 from octseg.metrics import SegmentationMetrics
 from octseg.model import build_swin_unetr
+from octseg.optim import build_optimizer
 from octseg.postprocess import clean_regions
 from octseg.splits import split_files
 from octseg.train import _seed_worker, calculate_dynamic_weights, seed_everything
@@ -108,7 +109,7 @@ def train_model_3d(output_dir: str, cfg: Config, epochs: int = None, save_path: 
 
     model = build_swin_unetr(cfg, pretrained=True).to(cfg.DEVICE)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.LR, weight_decay=cfg.WEIGHT_DECAY)
+    optimizer, sam = build_optimizer(model, cfg)
     scheduler = get_cosine_schedule_with_warmup(
         optimizer, num_warmup_steps=cfg.WARMUP_EPOCHS, num_training_steps=epochs
     )
@@ -129,26 +130,54 @@ def train_model_3d(output_dir: str, cfg: Config, epochs: int = None, save_path: 
             images = batch["image"].to(cfg.DEVICE)
             labels = batch["label"][:, 0].long().to(cfg.DEVICE)
 
-            with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
-                logits = model(images)
-                main_loss = cfg.FOCAL_WEIGHT * focal_criterion(logits, labels)
+            if sam is not None:
+                optimizer.zero_grad()
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    logits1 = model(images)
+                    main_loss1 = cfg.FOCAL_WEIGHT * focal_criterion(logits1, labels)
+                    aux_loss1 = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss1 += cfg.TVERSKY_WEIGHT * tversky_criterion(logits1, labels)
+                    loss1 = main_loss1 + aux_loss1
+                scaler.scale(loss1).backward()
+                sam.first_step(zero_grad=True)
 
-                aux_loss = 0.0
-                if cfg.USE_TVERSKY:
-                    aux_loss += cfg.TVERSKY_WEIGHT * tversky_criterion(logits, labels)
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    logits2 = model(images)
+                    main_loss2 = cfg.FOCAL_WEIGHT * focal_criterion(logits2, labels)
+                    aux_loss2 = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss2 += cfg.TVERSKY_WEIGHT * tversky_criterion(logits2, labels)
+                    loss2 = (main_loss2 + aux_loss2) / cfg.ACCUMULATION_STEPS
+                scaler.scale(loss2).backward()
+                sam.restore()
 
-                loss = (main_loss + aux_loss) / cfg.ACCUMULATION_STEPS
+                if cfg.ACCUMULATION_STEPS > 1:
+                    sam.accumulate_pass2()
 
-            scaler.scale(loss).backward()
+                step_loss = loss2.item() * cfg.ACCUMULATION_STEPS
+            else:
+                with torch.amp.autocast(cfg.DEVICE.type, enabled=cfg.USE_AMP):
+                    logits = model(images)
+                    main_loss = cfg.FOCAL_WEIGHT * focal_criterion(logits, labels)
+                    aux_loss = 0.0
+                    if cfg.USE_TVERSKY:
+                        aux_loss += cfg.TVERSKY_WEIGHT * tversky_criterion(logits, labels)
+                    loss = (main_loss + aux_loss) / cfg.ACCUMULATION_STEPS
+                scaler.scale(loss).backward()
+                step_loss = loss.item() * cfg.ACCUMULATION_STEPS
+
             if (i + 1) % cfg.ACCUMULATION_STEPS == 0:
+                if sam is not None and cfg.ACCUMULATION_STEPS > 1:
+                    sam.flush_accumulated()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
 
-            epoch_loss += loss.item() * cfg.ACCUMULATION_STEPS
-            pbar.set_postfix({"loss": f"{loss.item() * cfg.ACCUMULATION_STEPS:.4f}"})
+            epoch_loss += step_loss
+            pbar.set_postfix({"loss": f"{step_loss:.4f}"})
 
         scheduler.step()
 

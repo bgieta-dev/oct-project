@@ -272,8 +272,11 @@ settings.local.py
 
 
 data_folder
+data_folder/
 eval_results.png
-
+/eval_results.png
+/metrics.png
+/predictions.png
 
 .claude
 # project outputs
@@ -282,6 +285,7 @@ eval_results.png
 /hybrid_eval_results/
 /attention_results/
 .codegraph/
+.pytest_cache
 # thesis build products (after Step 5)
 docs/thesis/*.aux
 docs/thesis/*.bbl

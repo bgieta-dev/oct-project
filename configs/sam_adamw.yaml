@@ -1,0 +1,7 @@
+# Sharpness-Aware Minimization (SAM) + AdamW baseline configuration.
+# Minimizes loss curvature to enhance cross-scanner generalization (Cirrus/Spectralis/Topcon)
+# and stabilize ViT attention representations on the RETOUCH dataset.
+base: base.yaml
+USE_SAM: true
+SAM_RHO: 0.05
+SAM_ADAPTIVE: false
