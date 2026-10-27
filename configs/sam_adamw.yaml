@@ -5,3 +5,5 @@ base: base.yaml
 USE_SAM: true
 SAM_RHO: 0.05
 SAM_ADAPTIVE: false
+BATCH_SIZE: 10
+ACCUMULATION_STEPS: 3
