@@ -1,0 +1,4 @@
+commit: ad703cf83acf6041312f9d52b42bd8fcead73532
+
+status (porcelain):
+?? train.log

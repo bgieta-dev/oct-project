@@ -1,0 +1,141 @@
+2026-10-27 14:57:10,371 | INFO     | __main__:main:43 - Pipeline started. Results directory: /home/bgieta/oct-project/outputs/runs/2026-10-27_14-57-10_test20
+2026-10-27 14:57:10,398 | INFO     | __main__:main:45 - Device: Tesla P100-PCIE-16GB
+2026-10-27 14:57:10,398 | INFO     | __main__:main:47 - GPU Max Memory Capacity: 15.89 GB
+2026-10-27 14:57:10,455 | INFO     | octseg.runs:check_vram_diagnostics:76 - VRAM Status Diagnostic: 15.64 GB Free / 15.89 GB Total
+2026-10-27 14:57:10,455 | INFO     | __main__:main:51 - --- PHASE 1: TRAINING ---
+2026-10-27 14:57:10,550 | INFO     | octseg.train:calculate_dynamic_weights:42 - Calculating dynamic class weights...
+2026-10-27 15:20:28,264 | INFO     | octseg.train:train_model:225 - Epoch 1 | Loss: 0.4912 | mIoU: 0.0709 | mHD95: 152.69
+2026-10-27 15:20:28,382 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.0709)
+2026-10-27 15:43:50,162 | INFO     | octseg.train:train_model:225 - Epoch 2 | Loss: 0.4778 | mIoU: 0.0494 | mHD95: 151.62
+2026-10-27 16:07:11,150 | INFO     | octseg.train:train_model:225 - Epoch 3 | Loss: 0.4305 | mIoU: 0.2516 | mHD95: 138.66
+2026-10-27 16:07:11,332 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.2516)
+2026-10-27 16:30:31,955 | INFO     | octseg.train:train_model:225 - Epoch 4 | Loss: 0.3686 | mIoU: 0.3574 | mHD95: 126.58
+2026-10-27 16:30:32,124 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.3574)
+2026-10-27 16:53:54,183 | INFO     | octseg.train:train_model:225 - Epoch 5 | Loss: 0.2958 | mIoU: 0.4213 | mHD95: 112.83
+2026-10-27 16:53:54,351 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.4213)
+2026-10-27 17:17:16,154 | INFO     | octseg.train:train_model:225 - Epoch 6 | Loss: 0.2459 | mIoU: 0.4645 | mHD95: 105.57
+2026-10-27 17:17:16,321 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.4645)
+2026-10-27 17:40:36,943 | INFO     | octseg.train:train_model:225 - Epoch 7 | Loss: 0.2107 | mIoU: 0.5219 | mHD95: 99.71
+2026-10-27 17:40:37,108 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.5219)
+2026-10-27 18:03:59,008 | INFO     | octseg.train:train_model:225 - Epoch 8 | Loss: 0.1844 | mIoU: 0.5116 | mHD95: 101.45
+2026-10-27 18:27:19,930 | INFO     | octseg.train:train_model:225 - Epoch 9 | Loss: 0.1677 | mIoU: 0.5334 | mHD95: 98.95
+2026-10-27 18:27:20,098 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.5334)
+2026-10-27 18:50:40,383 | INFO     | octseg.train:train_model:225 - Epoch 10 | Loss: 0.1592 | mIoU: 0.5624 | mHD95: 93.08
+2026-10-27 18:50:40,560 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.5624)
+2026-10-27 19:14:00,109 | INFO     | octseg.train:train_model:225 - Epoch 11 | Loss: 0.1552 | mIoU: 0.5828 | mHD95: 86.26
+2026-10-27 19:14:00,276 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.5828)
+2026-10-27 19:37:19,565 | INFO     | octseg.train:train_model:225 - Epoch 12 | Loss: 0.1473 | mIoU: 0.5832 | mHD95: 85.40
+2026-10-27 19:37:19,733 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.5832)
+2026-10-27 20:00:39,360 | INFO     | octseg.train:train_model:225 - Epoch 13 | Loss: 0.1391 | mIoU: 0.5804 | mHD95: 86.04
+2026-10-27 20:23:58,997 | INFO     | octseg.train:train_model:225 - Epoch 14 | Loss: 0.1355 | mIoU: 0.6303 | mHD95: 77.09
+2026-10-27 20:23:59,175 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6303)
+2026-10-27 20:47:18,359 | INFO     | octseg.train:train_model:225 - Epoch 15 | Loss: 0.1412 | mIoU: 0.6441 | mHD95: 75.71
+2026-10-27 20:47:18,537 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6441)
+2026-10-27 21:10:36,817 | INFO     | octseg.train:train_model:225 - Epoch 16 | Loss: 0.1326 | mIoU: 0.6228 | mHD95: 81.95
+2026-10-27 21:33:53,888 | INFO     | octseg.train:train_model:225 - Epoch 17 | Loss: 0.1285 | mIoU: 0.6259 | mHD95: 82.60
+2026-10-27 21:57:10,296 | INFO     | octseg.train:train_model:225 - Epoch 18 | Loss: 0.1261 | mIoU: 0.6571 | mHD95: 71.72
+2026-10-27 21:57:10,470 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6571)
+2026-10-27 22:20:29,561 | INFO     | octseg.train:train_model:225 - Epoch 19 | Loss: 0.1294 | mIoU: 0.6493 | mHD95: 75.98
+2026-10-27 22:43:48,184 | INFO     | octseg.train:train_model:225 - Epoch 20 | Loss: 0.1247 | mIoU: 0.6231 | mHD95: 77.88
+2026-10-27 23:07:06,766 | INFO     | octseg.train:train_model:225 - Epoch 21 | Loss: 0.1220 | mIoU: 0.6406 | mHD95: 73.82
+2026-10-27 23:30:26,384 | INFO     | octseg.train:train_model:225 - Epoch 22 | Loss: 0.1200 | mIoU: 0.6541 | mHD95: 76.27
+2026-10-27 23:53:46,906 | INFO     | octseg.train:train_model:225 - Epoch 23 | Loss: 0.1245 | mIoU: 0.6302 | mHD95: 80.70
+2026-10-28 00:17:07,264 | INFO     | octseg.train:train_model:225 - Epoch 24 | Loss: 0.1160 | mIoU: 0.6646 | mHD95: 72.74
+2026-10-28 00:17:07,416 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6646)
+2026-10-28 00:40:27,317 | INFO     | octseg.train:train_model:225 - Epoch 25 | Loss: 0.1187 | mIoU: 0.6553 | mHD95: 75.36
+2026-10-28 01:03:45,760 | INFO     | octseg.train:train_model:225 - Epoch 26 | Loss: 0.1162 | mIoU: 0.6529 | mHD95: 73.32
+2026-10-28 01:27:04,082 | INFO     | octseg.train:train_model:225 - Epoch 27 | Loss: 0.1142 | mIoU: 0.6619 | mHD95: 72.78
+2026-10-28 01:50:21,065 | INFO     | octseg.train:train_model:225 - Epoch 28 | Loss: 0.1107 | mIoU: 0.6757 | mHD95: 68.27
+2026-10-28 01:50:21,244 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6757)
+2026-10-28 02:13:37,564 | INFO     | octseg.train:train_model:225 - Epoch 29 | Loss: 0.1123 | mIoU: 0.6931 | mHD95: 67.33
+2026-10-28 02:13:37,738 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.6931)
+2026-10-28 02:36:53,381 | INFO     | octseg.train:train_model:225 - Epoch 30 | Loss: 0.1111 | mIoU: 0.6736 | mHD95: 69.60
+2026-10-28 03:00:07,650 | INFO     | octseg.train:train_model:225 - Epoch 31 | Loss: 0.1109 | mIoU: 0.6904 | mHD95: 66.95
+2026-10-28 03:23:21,435 | INFO     | octseg.train:train_model:225 - Epoch 32 | Loss: 0.1158 | mIoU: 0.6906 | mHD95: 67.97
+2026-10-28 03:46:34,753 | INFO     | octseg.train:train_model:225 - Epoch 33 | Loss: 0.1094 | mIoU: 0.6753 | mHD95: 68.54
+2026-10-28 04:09:47,820 | INFO     | octseg.train:train_model:225 - Epoch 34 | Loss: 0.1063 | mIoU: 0.7015 | mHD95: 64.19
+2026-10-28 04:09:47,997 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7015)
+2026-10-28 04:33:01,483 | INFO     | octseg.train:train_model:225 - Epoch 35 | Loss: 0.1095 | mIoU: 0.6648 | mHD95: 71.97
+2026-10-28 04:56:13,589 | INFO     | octseg.train:train_model:225 - Epoch 36 | Loss: 0.1090 | mIoU: 0.6708 | mHD95: 71.63
+2026-10-28 05:19:25,719 | INFO     | octseg.train:train_model:225 - Epoch 37 | Loss: 0.1090 | mIoU: 0.6878 | mHD95: 69.32
+2026-10-28 05:42:37,707 | INFO     | octseg.train:train_model:225 - Epoch 38 | Loss: 0.1058 | mIoU: 0.6955 | mHD95: 67.51
+2026-10-28 06:05:50,237 | INFO     | octseg.train:train_model:225 - Epoch 39 | Loss: 0.1048 | mIoU: 0.7003 | mHD95: 65.02
+2026-10-28 06:29:03,726 | INFO     | octseg.train:train_model:225 - Epoch 40 | Loss: 0.1062 | mIoU: 0.7002 | mHD95: 63.15
+2026-10-28 06:52:16,854 | INFO     | octseg.train:train_model:225 - Epoch 41 | Loss: 0.1046 | mIoU: 0.6905 | mHD95: 64.79
+2026-10-28 07:15:29,919 | INFO     | octseg.train:train_model:225 - Epoch 42 | Loss: 0.1072 | mIoU: 0.6805 | mHD95: 68.48
+2026-10-28 07:38:43,944 | INFO     | octseg.train:train_model:225 - Epoch 43 | Loss: 0.1058 | mIoU: 0.6829 | mHD95: 71.96
+2026-10-28 08:01:56,979 | INFO     | octseg.train:train_model:225 - Epoch 44 | Loss: 0.1047 | mIoU: 0.6854 | mHD95: 69.72
+2026-10-28 08:25:09,557 | INFO     | octseg.train:train_model:225 - Epoch 45 | Loss: 0.1055 | mIoU: 0.6856 | mHD95: 68.24
+2026-10-28 08:48:23,745 | INFO     | octseg.train:train_model:225 - Epoch 46 | Loss: 0.1050 | mIoU: 0.6860 | mHD95: 65.34
+2026-10-28 09:11:40,422 | INFO     | octseg.train:train_model:225 - Epoch 47 | Loss: 0.0983 | mIoU: 0.6816 | mHD95: 70.25
+2026-10-28 09:34:57,459 | INFO     | octseg.train:train_model:225 - Epoch 48 | Loss: 0.1010 | mIoU: 0.6905 | mHD95: 67.31
+2026-10-28 09:58:15,510 | INFO     | octseg.train:train_model:225 - Epoch 49 | Loss: 0.0922 | mIoU: 0.6957 | mHD95: 66.06
+2026-10-28 10:21:33,796 | INFO     | octseg.train:train_model:225 - Epoch 50 | Loss: 0.0994 | mIoU: 0.6964 | mHD95: 66.43
+2026-10-28 10:44:53,161 | INFO     | octseg.train:train_model:225 - Epoch 51 | Loss: 0.1033 | mIoU: 0.6898 | mHD95: 67.24
+2026-10-28 11:08:13,335 | INFO     | octseg.train:train_model:225 - Epoch 52 | Loss: 0.1004 | mIoU: 0.6938 | mHD95: 64.24
+2026-10-28 11:31:33,417 | INFO     | octseg.train:train_model:225 - Epoch 53 | Loss: 0.1015 | mIoU: 0.7033 | mHD95: 63.96
+2026-10-28 11:31:33,586 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7033)
+2026-10-28 11:54:54,152 | INFO     | octseg.train:train_model:225 - Epoch 54 | Loss: 0.1062 | mIoU: 0.7029 | mHD95: 63.81
+2026-10-28 12:18:15,272 | INFO     | octseg.train:train_model:225 - Epoch 55 | Loss: 0.0961 | mIoU: 0.7010 | mHD95: 65.26
+2026-10-28 12:41:35,785 | INFO     | octseg.train:train_model:225 - Epoch 56 | Loss: 0.0993 | mIoU: 0.7028 | mHD95: 64.18
+2026-10-28 13:04:55,922 | INFO     | octseg.train:train_model:225 - Epoch 57 | Loss: 0.1015 | mIoU: 0.7031 | mHD95: 66.57
+2026-10-28 13:28:16,961 | INFO     | octseg.train:train_model:225 - Epoch 58 | Loss: 0.0971 | mIoU: 0.6943 | mHD95: 65.07
+2026-10-28 13:51:38,927 | INFO     | octseg.train:train_model:225 - Epoch 59 | Loss: 0.1030 | mIoU: 0.7061 | mHD95: 62.55
+2026-10-28 13:51:39,101 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7061)
+2026-10-28 14:15:00,621 | INFO     | octseg.train:train_model:225 - Epoch 60 | Loss: 0.0983 | mIoU: 0.7097 | mHD95: 63.13
+2026-10-28 14:15:00,794 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7097)
+2026-10-28 14:38:22,090 | INFO     | octseg.train:train_model:225 - Epoch 61 | Loss: 0.0986 | mIoU: 0.7054 | mHD95: 62.35
+2026-10-28 15:01:42,808 | INFO     | octseg.train:train_model:225 - Epoch 62 | Loss: 0.1015 | mIoU: 0.7062 | mHD95: 61.92
+2026-10-28 15:25:03,872 | INFO     | octseg.train:train_model:225 - Epoch 63 | Loss: 0.0981 | mIoU: 0.7098 | mHD95: 61.14
+2026-10-28 15:25:04,052 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7098)
+2026-10-28 15:48:25,565 | INFO     | octseg.train:train_model:225 - Epoch 64 | Loss: 0.1016 | mIoU: 0.7066 | mHD95: 61.34
+2026-10-28 16:11:46,639 | INFO     | octseg.train:train_model:225 - Epoch 65 | Loss: 0.0999 | mIoU: 0.7036 | mHD95: 62.41
+2026-10-28 16:35:07,516 | INFO     | octseg.train:train_model:225 - Epoch 66 | Loss: 0.0976 | mIoU: 0.7069 | mHD95: 62.08
+2026-10-28 16:58:28,389 | INFO     | octseg.train:train_model:225 - Epoch 67 | Loss: 0.1016 | mIoU: 0.7065 | mHD95: 62.52
+2026-10-28 17:21:49,652 | INFO     | octseg.train:train_model:225 - Epoch 68 | Loss: 0.0990 | mIoU: 0.6991 | mHD95: 64.62
+2026-10-28 17:45:10,744 | INFO     | octseg.train:train_model:225 - Epoch 69 | Loss: 0.0993 | mIoU: 0.7037 | mHD95: 63.36
+2026-10-28 18:08:31,219 | INFO     | octseg.train:train_model:225 - Epoch 70 | Loss: 0.0982 | mIoU: 0.7016 | mHD95: 62.94
+2026-10-28 18:31:51,013 | INFO     | octseg.train:train_model:225 - Epoch 71 | Loss: 0.0993 | mIoU: 0.7123 | mHD95: 60.09
+2026-10-28 18:31:51,197 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7123)
+2026-10-28 18:55:11,301 | INFO     | octseg.train:train_model:225 - Epoch 72 | Loss: 0.0992 | mIoU: 0.7055 | mHD95: 61.87
+2026-10-28 19:18:32,061 | INFO     | octseg.train:train_model:225 - Epoch 73 | Loss: 0.1044 | mIoU: 0.7106 | mHD95: 61.54
+2026-10-28 19:41:52,827 | INFO     | octseg.train:train_model:225 - Epoch 74 | Loss: 0.0943 | mIoU: 0.7056 | mHD95: 61.98
+2026-10-28 20:05:13,134 | INFO     | octseg.train:train_model:225 - Epoch 75 | Loss: 0.0989 | mIoU: 0.7104 | mHD95: 61.14
+2026-10-28 20:28:34,095 | INFO     | octseg.train:train_model:225 - Epoch 76 | Loss: 0.0959 | mIoU: 0.7067 | mHD95: 62.24
+2026-10-28 20:51:54,335 | INFO     | octseg.train:train_model:225 - Epoch 77 | Loss: 0.0980 | mIoU: 0.7073 | mHD95: 61.95
+2026-10-28 21:15:15,149 | INFO     | octseg.train:train_model:225 - Epoch 78 | Loss: 0.0960 | mIoU: 0.7123 | mHD95: 60.76
+2026-10-28 21:15:15,323 | INFO     | octseg.train:train_model:229 - New best model saved! (mIoU: 0.7123)
+2026-10-28 21:38:36,189 | INFO     | octseg.train:train_model:225 - Epoch 79 | Loss: 0.0990 | mIoU: 0.7069 | mHD95: 61.69
+2026-10-28 22:01:59,088 | INFO     | octseg.train:train_model:225 - Epoch 80 | Loss: 0.0993 | mIoU: 0.7062 | mHD95: 62.09
+2026-10-28 22:01:59,242 | INFO     | octseg.train:train_model:233 - Peak training VRAM: 11762 MB
+2026-10-28 22:01:59,249 | INFO     | __main__:main:61 - Training complete. Model weights stored safely.
+2026-10-28 22:01:59,994 | INFO     | __main__:main:74 - --- PHASE 2: EVALUATION ---
+2026-10-28 22:02:00,016 | INFO     | octseg.evaluate:evaluate_model:37 - Scanning raw masks for visualisation slice selection...
+2026-10-28 22:02:00,741 | INFO     | octseg.evaluate:evaluate_model:39 - Dynamic vis indices: {1: 331, 2: 283, 3: 556}
+2026-10-28 22:02:01,138 | INFO     | octseg.evaluate:evaluate_model:43 - Loading weights from /home/bgieta/oct-project/outputs/runs/2026-10-27_14-57-10_test20/best_model.pth
+2026-10-28 22:02:02,628 | INFO     | octseg.evaluate:evaluate_model:58 - Evaluating on 674 slices...
+2026-10-28 22:06:07,838 | INFO     | octseg.evaluate:evaluate_model:96 - Generating predictions.png...
+2026-10-28 22:06:09,769 | INFO     | octseg.evaluate:evaluate_model:99 - Saving failure cases...
+2026-10-28 22:06:11,677 | INFO     | octseg.evaluate:log_metrics:111 - Final mIoU: 0.7035 | Final mDice: 0.8142
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:112 - Final mHD95: 73.5835 | Final mASD: 25.4211
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:114 - Model Parameters: 27.35M
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:116 - Class 1 (IRF) | IoU: 0.5035 | Dice: 0.6698 | HD95: 51.87 | ASD: 12.12
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:117 -   Regions GT/Pred: 8.9/4.1 | BP: 11.6668 | Avg Area: 10266.6 px
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:116 - Class 2 (SRF) | IoU: 0.7216 | Dice: 0.8383 | HD95: 93.25 | ASD: 36.83
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:117 -   Regions GT/Pred: 1.3/1.6 | BP: 13.5057 | Avg Area: 16132.9 px
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:116 - Class 3 (PED) | IoU: 0.6174 | Dice: 0.7634 | HD95: 75.63 | ASD: 27.31
+2026-10-28 22:06:11,678 | INFO     | octseg.evaluate:log_metrics:117 -   Regions GT/Pred: 1.3/1.5 | BP: 6.1818 | Avg Area: 23202.6 px
+2026-10-28 22:06:11,678 | INFO     | __main__:main:91 - --- PHASE 3: ATTENTION VISUALIZATION ---
+2026-10-28 22:06:11,678 | INFO     | octseg.attention_visualizer:generate_attention_maps:31 - Loading model for attention visualization: /home/bgieta/oct-project/outputs/runs/2026-10-27_14-57-10_test20/best_model.pth...
+2026-10-28 22:06:13,443 | INFO     | octseg.attention_visualizer:generate_attention_maps:38 - Scanning for slices with significant pathology for visualization...
+2026-10-28 22:06:13,805 | INFO     | octseg.attention_visualizer:generate_attention_maps:41 - Targeting indices: [283, 331, 556]
+2026-10-28 22:06:13,805 | INFO     | octseg.attention_visualizer:generate_attention_maps:47 - Generating attention maps...
+2026-10-28 22:06:13,823 | INFO     | octseg.attention_visualizer:generate_attention_maps:65 - -> Generating maps for SRF (Index 283, Pathology pixels: 55691)
+2026-10-28 22:06:14,095 | INFO     | octseg.attention_visualizer:generate_attention_maps:65 - -> Generating maps for IRF (Index 331, Pathology pixels: 29619)
+2026-10-28 22:06:14,344 | INFO     | octseg.attention_visualizer:generate_attention_maps:65 - -> Generating maps for PED (Index 556, Pathology pixels: 72725)
+2026-10-28 22:06:14,577 | INFO     | octseg.attention_visualizer:generate_attention_maps:90 - Done! Results saved in /home/bgieta/oct-project/outputs/runs/2026-10-27_14-57-10_test20/attention_maps/
+2026-10-28 22:06:14,578 | INFO     | octseg.runs:archive_experiment_sources:88 - --- SOURCE ARCHIVING ---
+2026-10-28 22:06:14,602 | INFO     | octseg.runs:archive_experiment_sources:100 - Source code and configurations archiving complete.
+2026-10-28 22:06:14,602 | INFO     | __main__:main:105 - Pipeline run fully finalized. All output saved to /home/bgieta/oct-project/outputs/runs/2026-10-27_14-57-10_test20
+2026-10-28 22:06:14,602 | INFO     | octseg.runs:promote_run_to_experiment:125 - Promoting run 2026-10-27_14-57-10_test20 to experiments/test20...
+2026-10-28 22:06:14,602 | INFO     | octseg.runs:promote_run_to_experiment:128 - Skipping checkpoint: best_model.pth
