@@ -43,12 +43,13 @@ octseg/            importable package (run modules with `python -m octseg.<modul
   pipeline.py        train -> eval -> attention -> snapshot [-> experiments/testN]
   run_series.py      several configs as consecutive testN experiments
   train_expert.py    binary IRF expert
-configs/           base.yaml, sam_adamw.yaml, irf_expert.yaml, hybrid.yaml, swin_unetr_3d.yaml,
+configs/           base.yaml, sam_adamw.yaml, test21.yaml, irf_expert.yaml, hybrid.yaml, swin_unetr_3d.yaml,
                    retfound_lora.yaml, retfound_lora_nodetail.yaml, retfound_frozen.yaml
 splits/            train/val/test patient lists (frozen, seed 42)
 tests/             pytest (synthetic data, CPU, seconds)
 scripts/           run.sh / run.bat (pipeline + auto-promotion), run_retfound_ablation.sh / .bat,
-                   git_update.sh / .bat, recover_gpu.ps1 / .bat (wrappers of the root scripts)
+                   run_p100.sh, git_update.sh / .bat, recover_gpu.ps1 / .bat (wrappers of the root scripts)
+run.sh / run.bat   root launcher (runs configs/test21.yaml by default, auto-promotes, calls git_update)
 git_update.sh/.bat git add + commit + pull --rebase + push
 recover_gpu.ps1/.bat  Windows: recover an NVIDIA GPU reported as "GPU is lost" without a reboot (admin)
 docs/              METHODS.md, EXPERIMENTS.md, ROADMAP.md, archive/, thesis/ (LaTeX sources)
