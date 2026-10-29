@@ -16,6 +16,20 @@ TVERSKY_BETA: 0.8
 FOCAL_WEIGHT: 0.5
 TVERSKY_WEIGHT: 0.5
 
+# Clinical IRF Priority: Disable dynamic weights (which inverted penalties to SRF 1.54 vs IRF 1.04)
+# Enforce 2.5x higher loss penalty on IRF (5.0) than SRF/PED (2.0)
+USE_DYNAMIC_WEIGHTS: false
+CLASS_WEIGHTS:
+  - 0.2
+  - 5.0
+  - 2.0
+  - 2.0
+
+CLASS_THRESHOLDS:
+  1: 0.25
+  2: 0.80
+  3: 0.80
+
 # Post-Processing Decoupling: Preserve small genuine IRF micro-cysts (>=20px)
 # while filtering larger noise on SRF/PED (>=80px) and disabling destructive cyst erosion
 CLASS_MIN_REGION_SIZES:

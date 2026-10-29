@@ -149,3 +149,6 @@ def test_config_test21():
     assert cfg.TVERSKY_BETA == 0.8
     assert cfg.CLASS_MIN_REGION_SIZES == {1: 20, 2: 80, 3: 80}
     assert cfg.IRF_OPEN is False
+    assert cfg.USE_DYNAMIC_WEIGHTS is False
+    assert cfg.CLASS_WEIGHTS == [0.2, 5.0, 2.0, 2.0]
+    assert cfg.CLASS_THRESHOLDS[1] == 0.25
