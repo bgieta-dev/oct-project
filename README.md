@@ -49,7 +49,8 @@ splits/            train/val/test patient lists (frozen, seed 42)
 tests/             pytest (synthetic data, CPU, seconds)
 scripts/           run.sh / run.bat (pipeline + auto-promotion), run_retfound_ablation.sh / .bat,
                    run_p100.sh, git_update.sh / .bat, recover_gpu.ps1 / .bat (wrappers of the root scripts)
-run.sh / run.bat   root launcher (runs configs/test21.yaml by default, auto-promotes, calls git_update)
+run.sh / run.bat   root local launcher (runs configs/test21.yaml by default, auto-promotes, calls git_update)
+run_remote_p100.sh / .bat  remote P100 launcher (SSH connects to 192.168.1.131, pulls git, launches/attaches tmux)
 git_update.sh/.bat git add + commit + pull --rebase + push
 recover_gpu.ps1/.bat  Windows: recover an NVIDIA GPU reported as "GPU is lost" without a reboot (admin)
 docs/              METHODS.md, EXPERIMENTS.md, ROADMAP.md, archive/, thesis/ (LaTeX sources)
