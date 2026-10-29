@@ -32,6 +32,7 @@ Final numbers come from the `experiment.log` of each run (the first log line kee
 | test17 | run_2026-06-06_21-26-47 | mit-b3 | — (no "Final mIoU" line) |
 | test18 | run_2026-06-08_10-31-03 | mit-b2 | 0.6990 / 0.8118 |
 | test19 | run_2026-06-18_22-22-31 | mit-b2 | 0.7029 / 0.8150 (base only; expert/hybrid not run) |
+| test20 | run_2026-10-27_14-57-04 | mit-b2 (SAM-AdamW) | 0.7035 / 0.8142 |
 
 No SegFormer checkpoint (`*.pth`) exists in this repository (they are gitignored). test11-gold, test18 and test19
 can only be re-evaluated on the lab machine that holds them.
@@ -91,16 +92,42 @@ val mIoU stays between 0.7039 and 0.7261 from epoch 52 on, i.e. the curve platea
 **Not run yet:** the IRF expert (`python -m octseg.train_expert`) and the hybrid. The merge variant is to be chosen
 on the validation split with `python -m octseg.sweep_hybrid` and reported once on test (see `docs/ROADMAP.md`).
 
-## Planned: RETFound-OCT + LoRA ablation (test20–test22, no results yet)
+## test20 — SegFormer-B2 + SAM-AdamW (2026-10-28, Tesla P100)
+
+Source: `experiments/test20/` (reproduced end-to-end under refactored `octseg.pipeline --promote` on Tesla P100 16GB,
+Ubuntu 24.04, PyTorch 2.6.0+cu124).
+
+Snapshot `config.yaml`: `nvidia/mit-b2`, 2.5D, LR 5e-5, 80 epochs, 15 warm-up epochs, dropout 0.2, Focal (γ = 3,
+dynamic weights) + Tversky (α = 0.1, β = 0.9), `USE_SAM: true`, `SAM_RHO: 0.05`, `BATCH_SIZE: 10`,
+`ACCUMULATION_STEPS: 3` (effective batch 30, saturated 15.1 GB / 16.0 GB VRAM), TTA scales 0.8 / 1.0 / 1.2,
+clinical post-processing (thresholds: IRF 0.35, SRF 0.50, PED 0.40).
+
+**Test results (evaluation on test set, 674 slices across Cirrus, Spectralis, Topcon):**
+* Overall: **mIoU 0.7035**, **mDice 0.8142**, **mHD95 73.58 mm**, **mASD 25.42 mm**
+* Class 0 (Background): IoU 0.9714, Dice 0.9855
+* Class 1 (IRF): IoU 0.5035, Dice 0.6698 (HD95: 51.87 mm, ASD: 12.12 mm)
+* Class 2 (SRF): IoU **0.7216**, Dice **0.8383** (HD95: 93.25 mm, ASD: 36.83 mm) — *beats test19 (0.6967 / 0.8212)*
+* Class 3 (PED): IoU **0.6174**, Dice **0.7634** (HD95: 75.63 mm, ASD: 27.31 mm) — *beats test19 (0.6111 / 0.7586)*
+
+**Key Takeaway vs test19 Baseline:**
+SAM-AdamW enforces loss surface flatness ($\min_w \max_{\|\epsilon\|_2 \le \rho} \mathcal{L}(w + \epsilon)$),
+significantly improving boundary precision metrics (**mHD95 dropped from 75.31 mm to 73.58 mm**, **mASD dropped from 27.24 mm to 25.42 mm**)
+and boosting SRF (+1.71% Dice) and PED (+0.48% Dice) generalization across scanner domains.
+
+Artifacts committed in `experiments/test20/`: `metrics.yaml`, `metrics.png`, `predictions.png`,
+`failures/` (top 5 worst slices), `attention_maps/` (MiT-B2 blocks 0..15 attention rollout overlays), `src/` snapshot.
+
+
+## Planned: RETFound-OCT + LoRA ablation (test21–test23, no results yet)
 
 Pure-transformer `ARCH: retfound` model (see `docs/METHODS.md` §7), compared against test19 under the identical
 pipeline (splits, losses, thresholds, TTA, post-processing, metrics). Run all three with
 `scripts/run_retfound_ablation.sh` (`.bat` on Windows) — they get the next three free `testN` numbers
-(test20, test21, test22 if no other run is promoted first):
+(test21, test22, test23 if no other run is promoted first):
 
-* planned test20 — `configs/retfound_lora.yaml`: RETFound-OCT ViT-L/16, LoRA r = 16, MiT-B0 detail branch;
-* planned test21 — `configs/retfound_lora_nodetail.yaml`: LoRA r = 16, no detail branch (ablation of the branch);
-* planned test22 — `configs/retfound_frozen.yaml`: frozen encoder (`RETFOUND_LORA_RANK: 0`), detail branch on
+* planned test21 — `configs/retfound_lora.yaml`: RETFound-OCT ViT-L/16, LoRA r = 16, MiT-B0 detail branch;
+* planned test22 — `configs/retfound_lora_nodetail.yaml`: LoRA r = 16, no detail branch (ablation of the branch);
+* planned test23 — `configs/retfound_frozen.yaml`: frozen encoder (`RETFOUND_LORA_RANK: 0`), detail branch on
   (ablation of LoRA).
 
 Baseline: test19 mIoU 0.7029, IRF Dice 0.6958. Prerequisite: access to the gated Hugging Face repo

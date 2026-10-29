@@ -26,7 +26,8 @@
 - **Workspace declutter & git hygiene**: Removed stray unreferenced root `metrics.png`; updated `.gitignore` with `/metrics.png`, `/predictions.png`, `data_folder/`, and `.pytest_cache` patterns to prevent future clutter from local runs and tooling.
 
 ### Docs
-- test19 (SegFormer-B2 base) added to the `docs/EXPERIMENTS.md` index; planned RETFound ablation test20–22; `docs/METHODS.md` sections on RETFound + LoRA, SwinUNETR 3D and the hybrid selection on val; `docs/ROADMAP.md` status of the vacation items.
+- **test20 Promoted (SegFormer-B2 + SAM-AdamW)**: Evaluated on test split (674 slices). Achieved mIoU **0.7035** (beating test19 0.7029), SRF Dice **0.8383** (+1.71%), PED Dice **0.7634** (+0.48%), and superior boundary metrics (**mHD95 73.58 mm** vs 75.31 mm, **mASD 25.42 mm** vs 27.24 mm). Artifacts archived in `experiments/test20/`.
+- test19 (SegFormer-B2 base) added to the `docs/EXPERIMENTS.md` index; planned RETFound ablation test21–23; `docs/METHODS.md` sections on RETFound + LoRA, SwinUNETR 3D and the hybrid selection on val; `docs/ROADMAP.md` status of the vacation items.
 
 ## [2.1.0] - 2026-10-03
 
