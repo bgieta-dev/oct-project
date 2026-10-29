@@ -77,8 +77,10 @@ def evaluate_model(model_path, output_dir, cfg: Config):
 
         sharpen_ped(probs_batch, factor=cfg.PED_SHARPEN_FACTOR)
         preds_batch = apply_thresholds(probs_batch, thresholds, irf_override=True)
-        if cfg.MIN_REGION_SIZE > 0:
-            preds_batch = np.array([clean_regions(p, cfg.MIN_REGION_SIZE, irf_open=True) for p in preds_batch])
+        min_sizes = cfg.CLASS_MIN_REGION_SIZES or cfg.MIN_REGION_SIZE
+        irf_open = getattr(cfg, "IRF_OPEN", True)
+        if cfg.MIN_REGION_SIZE > 0 or cfg.CLASS_MIN_REGION_SIZES:
+            preds_batch = np.array([clean_regions(p, min_sizes, irf_open=irf_open) for p in preds_batch])
 
         for b_idx in range(len(preds_batch)):
             labels, pred = labels_batch[b_idx], preds_batch[b_idx]

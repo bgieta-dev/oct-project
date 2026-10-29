@@ -7,11 +7,13 @@ from octseg.config import CONFIG_DIR, Config, load_config
 from octseg.optim import SAM, build_optimizer
 
 
-def test_sam_invalid_rho():
+def test_sam_invalid_rho_and_eta():
     model = nn.Linear(4, 2)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    with pytest.raises(ValueError, match="non-negative"):
+    with pytest.raises(ValueError, match="rho"):
         SAM(opt, rho=-0.01)
+    with pytest.raises(ValueError, match="eta"):
+        SAM(opt, rho=0.05, eta=-0.01)
 
 
 def test_sam_step_synthetic_cpu():
@@ -112,3 +114,38 @@ def test_config_sam_validation():
     assert sam_cfg.USE_SAM is True
     assert sam_cfg.SAM_RHO == 0.05
     assert sam_cfg.SAM_ADAPTIVE is False
+
+def test_asam_step_synthetic_cpu():
+    torch.manual_seed(42)
+    model = nn.Linear(4, 2)
+    initial_w = model.weight.data.clone()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    sam = SAM(optimizer, rho=0.5, adaptive=True, eta=0.01)
+
+    x = torch.randn(2, 4)
+    y = torch.tensor([0, 1])
+    criterion = nn.CrossEntropyLoss()
+
+    optimizer.zero_grad()
+    loss = criterion(model(x), y)
+    loss.backward()
+
+    sam.first_step(zero_grad=True)
+    perturbed_w = model.weight.data.clone()
+    assert not torch.allclose(initial_w, perturbed_w)
+
+    sam.restore()
+    assert torch.allclose(initial_w, model.weight.data)
+
+
+def test_config_test21():
+    cfg = load_config(CONFIG_DIR / "test21.yaml")
+    assert cfg.USE_SAM is True
+    assert cfg.SAM_ADAPTIVE is True
+    assert cfg.SAM_RHO == 0.5
+    assert cfg.SAM_ETA == 0.01
+    assert cfg.FOCAL_GAMMA == 2.0
+    assert cfg.TVERSKY_ALPHA == 0.2
+    assert cfg.TVERSKY_BETA == 0.8
+    assert cfg.CLASS_MIN_REGION_SIZES == {1: 20, 2: 80, 3: 80}
+    assert cfg.IRF_OPEN is False

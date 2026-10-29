@@ -1,0 +1,29 @@
+# test21: Stabilized Adaptive SAM (ASAM), Micro-Lesion Boundary Recovery,
+# and Decoupled Post-Processing on Tesla P100 16GB.
+base: sam_adamw.yaml
+
+# Optimizer: Stabilized Adaptive SAM (ASAM) with scale-invariant perturbation
+USE_SAM: true
+SAM_ADAPTIVE: true
+SAM_RHO: 0.5
+SAM_ETA: 0.01
+
+# Loss Formulation: Micro-Lesion Boundary Recovery
+# Reduced gamma restores 2x gradient flow to ambiguous micro-cyst boundaries
+FOCAL_GAMMA: 2.0
+TVERSKY_ALPHA: 0.2
+TVERSKY_BETA: 0.8
+FOCAL_WEIGHT: 0.5
+TVERSKY_WEIGHT: 0.5
+
+# Post-Processing Decoupling: Preserve small genuine IRF micro-cysts (>=20px)
+# while filtering larger noise on SRF/PED (>=80px) and disabling destructive cyst erosion
+CLASS_MIN_REGION_SIZES:
+  1: 20
+  2: 80
+  3: 80
+IRF_OPEN: false
+
+# Hardware / Batch Settings (Tesla P100 16GB @ 125W Clamp)
+BATCH_SIZE: 10
+ACCUMULATION_STEPS: 3

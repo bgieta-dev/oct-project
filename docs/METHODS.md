@@ -22,7 +22,7 @@ nabłonka barwnikowego).
   Mniejsze modele (B0) i większe (B3) wybiera się w YAML-u; rozmiar batcha wynika z backbone'u
   (B2/B3: 8 × 4 akumulacje, B0/B1: 16 × 2; efektywny batch = 32).
 * Optymalizator **AdamW**, `lr = 5e-5`, `weight_decay = 5e-2`, przycinanie gradientu do normy 1,0, AMP.
-* Opcjonalna regularyzacja geometrii funkcji straty: **SAM (Sharpness-Aware Minimization)** (Foret et al., 2021) z bazowym optymalizatorem AdamW (`configs/sam_adamw.yaml`, `USE_SAM: true`, domyślny promień $\rho = 0{,}05$). Minimalizuje jednocześnie wartość funkcji straty oraz jej lokalną ostrość (krzywiznę / ślad hesjanu): $\min_w \max_{\|\epsilon\|_2 \le \rho} \mathcal{L}(w + \epsilon)$. Chroni mechanizmy uwagi (self-attention) przed nadmiernym dopasowaniem do artefaktów pojedynczych skanerów (Cirrus / Spectralis / Topcon) na małej kohorcie (56 pacjentów). W pełni kompatybilny z AMP GradScaler i akumulacją gradientów (`octseg/optim.py`).
+* Opcjonalna regularyzacja geometrii funkcji straty: **SAM (Sharpness-Aware Minimization)** (Foret et al., 2021) oraz **ASAM (Adaptive SAM)** (Kwon et al., 2021) z bazowym optymalizatorem AdamW (`configs/sam_adamw.yaml`, `configs/test21.yaml`, `USE_SAM: true`). SAM minimalizuje jednocześnie wartość funkcji straty oraz jej lokalną ostrość: $\min_w \max_{\|\epsilon\|_2 \le \rho} \mathcal{L}(w + \epsilon)$. W wariancie adaptacyjnym (`SAM_ADAPTIVE: true`, $\rho = 0{,}5$, $\eta = 0{,}01$) perturbacja jest niezmiennicza względem skali wag: $T_w = |w| + \eta$, $e_w = \rho \frac{T_w^2 \odot \nabla_w \mathcal{L}}{\| T_w \odot \nabla_w \mathcal{L} \|_2}$, co chroni drobne filtry mikrotorbieli (IRF) w początkowych blokach MiT przed nadmiernym wygładzeniem gradientowym przy zachowaniu silnej regularyzacji dużych macierzy projekcji. W pełni kompatybilny z AMP GradScaler i wielokrotną akumulacją gradientów (`octseg/optim.py`).
 * Harmonogram: **cosinusowy z rozgrzewką** (`get_cosine_schedule_with_warmup`, 15 epok rozgrzewki, krok po epoce),
   80 epok.
 * Funkcja straty: `0,5 · Focal (γ = 3, wagi klas dynamiczne) + 0,5 · Tversky (α = 0,1, β = 0,9)`
@@ -31,9 +31,7 @@ nabłonka barwnikowego).
   pogarszał HD95 i destabilizował trening.
 * Augmentacje: CLAHE, RandomResizedCrop (skala 0,8–1,0), flip poziomy, obrót ±10°, elastic/grid distortion,
   jasność/kontrast, szum gaussowski.
-* **Walidacja** po każdej epoce: `argmax` + usuwanie regionów < 80 px (bez otwarcia morfologicznego);
-  zapisywany jest checkpoint z najlepszym mIoU. mHD95 w walidacji liczy **karę 100** za klasę pominiętą
-  lub fałszywie wykrytą (polityka `penalty100`).
+* **Walidacja i post-processing**: `argmax` + klasowo zróżnicowane progi wielkości regionów (`CLASS_MIN_REGION_SIZES: {1: 20, 2: 80, 3: 80}`, pole `MIN_REGION_SIZE`), zapobiegające usuwaniu mikrotorbieli IRF ($20\text{--}80\text{ px}$) przy odrzucaniu artefaktów tła; opcjonalne wyłączenie destrukcyjnego otwarcia morfologicznego dla IRF (`IRF_OPEN: false`). Zapisywany jest checkpoint z najlepszym mIoU. mHD95 w walidacji liczy **karę 100** za klasę pominiętą lub fałszywie wykrytą (polityka `penalty100`).
 * Powtarzalność: `seed_everything(SEED)` (python/numpy/torch), generator i `worker_init_fn` w `DataLoader`;
   `cudnn.deterministic` celowo **nie** jest wymuszane (AMP, 12 GB VRAM).
 

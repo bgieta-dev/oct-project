@@ -75,8 +75,10 @@ def validate(model, val_loader, cfg):
             preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
             labels_np = labels_batch.cpu().numpy()
 
-            if cfg.MIN_REGION_SIZE > 0:
-                preds = np.array([clean_regions(p, cfg.MIN_REGION_SIZE, irf_open=False) for p in preds])
+            min_sizes = cfg.CLASS_MIN_REGION_SIZES or cfg.MIN_REGION_SIZE
+            irf_open = getattr(cfg, "IRF_OPEN", False)
+            if cfg.MIN_REGION_SIZE > 0 or cfg.CLASS_MIN_REGION_SIZES:
+                preds = np.array([clean_regions(p, min_sizes, irf_open=irf_open) for p in preds])
 
             for p, l_np in zip(preds, labels_np):
                 metrics.update(l_np, p)

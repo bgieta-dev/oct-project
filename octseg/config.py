@@ -57,6 +57,7 @@ class Config:
     USE_SAM: bool = False
     SAM_RHO: float = 0.05
     SAM_ADAPTIVE: bool = False
+    SAM_ETA: float = 0.01
 
     # --- loss ---
     USE_DYNAMIC_WEIGHTS: bool = True
@@ -77,6 +78,8 @@ class Config:
 
     # --- evaluation & post-processing ---
     MIN_REGION_SIZE: int = 80
+    CLASS_MIN_REGION_SIZES: Optional[Dict[int, int]] = None
+    IRF_OPEN: bool = True
     USE_TTA: bool = True
     TTA_SCALES: List[float] = field(default_factory=lambda: [0.8, 1.0, 1.2])
     # Lower thresholds force fluid predictions at lower confidence (clinical high recall)
@@ -163,6 +166,8 @@ class Config:
 
         if self.SAM_RHO < 0.0:
             raise ValueError(f"SAM_RHO must be >= 0, got {self.SAM_RHO}")
+        if self.SAM_ETA < 0.0:
+            raise ValueError(f"SAM_ETA must be >= 0, got {self.SAM_ETA}")
     # --- runtime-resolved values (never serialised) ---
     @property
     def DEVICE(self) -> torch.device:

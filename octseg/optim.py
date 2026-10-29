@@ -24,12 +24,15 @@ class SAM:
     parameter groups.
     """
 
-    def __init__(self, optimizer: torch.optim.Optimizer, rho: float = 0.05, adaptive: bool = False):
+    def __init__(self, optimizer: torch.optim.Optimizer, rho: float = 0.05, adaptive: bool = False, eta: float = 0.01):
         if rho < 0.0:
             raise ValueError(f"Invalid rho, should be non-negative: {rho}")
+        if eta < 0.0:
+            raise ValueError(f"Invalid eta, should be non-negative: {eta}")
         self.optimizer = optimizer
         self.rho = rho
         self.adaptive = adaptive
+        self.eta = eta
         self.state = defaultdict(dict)
         self._grad_acc = {}
 
@@ -60,7 +63,11 @@ class SAM:
                 if p.grad is None:
                     continue
                 self.state[p]["old_p"] = p.data.clone()
-                e_w = (torch.pow(p, 2) if self.adaptive else 1.0) * p.grad * scale.to(p)
+                if self.adaptive:
+                    tw = torch.abs(p) + self.eta
+                    e_w = torch.pow(tw, 2) * p.grad * scale.to(p)
+                else:
+                    e_w = p.grad * scale.to(p)
                 p.add_(e_w)
 
         if zero_grad:
@@ -116,7 +123,8 @@ class SAM:
                 if p.grad is not None:
                     g = p.grad
                     if self.adaptive:
-                        g = g * torch.abs(p)
+                        tw = torch.abs(p) + self.eta
+                        g = g * tw
                     norms.append(torch.norm(g, p=2).to(shared_device))
         if not norms:
             return torch.tensor(0.0, device=shared_device)
@@ -143,6 +151,6 @@ def build_optimizer(model: nn.Module, cfg) -> Tuple[torch.optim.Optimizer, Optio
 
     sam: Optional[SAM] = None
     if cfg.USE_SAM:
-        sam = SAM(optimizer, rho=cfg.SAM_RHO, adaptive=cfg.SAM_ADAPTIVE)
+        sam = SAM(optimizer, rho=cfg.SAM_RHO, adaptive=cfg.SAM_ADAPTIVE, eta=getattr(cfg, "SAM_ETA", 0.01))
 
     return optimizer, sam
