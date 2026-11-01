@@ -1,0 +1,131 @@
+2026-11-01 15:44:27,624 | INFO     | __main__:main:187 - Hybrid pipeline started. Run directory: /home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22
+2026-11-01 15:44:27,649 | INFO     | __main__:main:188 - Device: Tesla P100-PCIE-16GB
+2026-11-01 15:44:27,649 | INFO     | __main__:main:192 - GPU Max Memory Capacity: 15.89 GB
+2026-11-01 15:44:27,707 | INFO     | octseg.runs:check_vram_diagnostics:76 - VRAM Status Diagnostic: 15.64 GB Free / 15.89 GB Total
+2026-11-01 15:44:27,712 | INFO     | __main__:pipeline_hybrid:55 - --- STEP 1: TRAINING IRF EXPERT (/home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22/expert) ---
+2026-11-01 15:44:27,712 | INFO     | octseg.train_expert:train_expert:19 - --- STARTING IRF EXPERT TRAINING ---
+2026-11-01 15:44:27,712 | INFO     | octseg.train_expert:train_expert:20 - Target Class: IRF
+2026-11-01 15:44:27,712 | INFO     | octseg.train_expert:train_expert:21 - Model: nvidia/mit-b0 | Tversky Beta: 0.7 | 2.5D: True
+2026-11-01 15:47:47,657 | INFO     | octseg.train:train_model:227 - Epoch 1 | Loss: 0.5707 | mIoU: 0.3698 | mHD95: 147.08
+2026-11-01 15:47:47,682 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.3698)
+2026-11-01 15:51:02,616 | INFO     | octseg.train:train_model:227 - Epoch 2 | Loss: 0.5591 | mIoU: 0.5314 | mHD95: 120.86
+2026-11-01 15:51:02,658 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.5314)
+2026-11-01 15:54:18,431 | INFO     | octseg.train:train_model:227 - Epoch 3 | Loss: 0.5347 | mIoU: 0.5787 | mHD95: 109.01
+2026-11-01 15:54:18,467 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.5787)
+2026-11-01 15:57:35,529 | INFO     | octseg.train:train_model:227 - Epoch 4 | Loss: 0.5075 | mIoU: 0.5469 | mHD95: 116.54
+2026-11-01 16:00:53,021 | INFO     | octseg.train:train_model:227 - Epoch 5 | Loss: 0.4857 | mIoU: 0.5333 | mHD95: 120.73
+2026-11-01 16:04:10,047 | INFO     | octseg.train:train_model:227 - Epoch 6 | Loss: 0.4660 | mIoU: 0.5403 | mHD95: 114.01
+2026-11-01 16:07:26,763 | INFO     | octseg.train:train_model:227 - Epoch 7 | Loss: 0.4423 | mIoU: 0.5486 | mHD95: 99.64
+2026-11-01 16:10:43,838 | INFO     | octseg.train:train_model:227 - Epoch 8 | Loss: 0.4084 | mIoU: 0.5642 | mHD95: 96.53
+2026-11-01 16:14:00,402 | INFO     | octseg.train:train_model:227 - Epoch 9 | Loss: 0.3617 | mIoU: 0.5912 | mHD95: 90.41
+2026-11-01 16:14:00,437 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.5912)
+2026-11-01 16:17:17,047 | INFO     | octseg.train:train_model:227 - Epoch 10 | Loss: 0.3157 | mIoU: 0.6224 | mHD95: 83.60
+2026-11-01 16:17:17,083 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.6224)
+2026-11-01 16:20:33,861 | INFO     | octseg.train:train_model:227 - Epoch 11 | Loss: 0.2820 | mIoU: 0.6482 | mHD95: 83.42
+2026-11-01 16:20:33,893 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.6482)
+2026-11-01 16:23:50,298 | INFO     | octseg.train:train_model:227 - Epoch 12 | Loss: 0.2519 | mIoU: 0.6923 | mHD95: 68.56
+2026-11-01 16:23:50,335 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.6923)
+2026-11-01 16:27:06,884 | INFO     | octseg.train:train_model:227 - Epoch 13 | Loss: 0.2366 | mIoU: 0.6799 | mHD95: 69.55
+2026-11-01 16:30:23,586 | INFO     | octseg.train:train_model:227 - Epoch 14 | Loss: 0.2239 | mIoU: 0.7169 | mHD95: 59.56
+2026-11-01 16:30:23,623 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7169)
+2026-11-01 16:33:39,941 | INFO     | octseg.train:train_model:227 - Epoch 15 | Loss: 0.2168 | mIoU: 0.7171 | mHD95: 58.93
+2026-11-01 16:33:39,976 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7171)
+2026-11-01 16:36:56,635 | INFO     | octseg.train:train_model:227 - Epoch 16 | Loss: 0.2058 | mIoU: 0.7057 | mHD95: 68.96
+2026-11-01 16:40:13,227 | INFO     | octseg.train:train_model:227 - Epoch 17 | Loss: 0.2021 | mIoU: 0.7282 | mHD95: 57.69
+2026-11-01 16:40:13,264 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7282)
+2026-11-01 16:43:29,708 | INFO     | octseg.train:train_model:227 - Epoch 18 | Loss: 0.1979 | mIoU: 0.7315 | mHD95: 54.59
+2026-11-01 16:43:29,744 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7315)
+2026-11-01 16:46:46,087 | INFO     | octseg.train:train_model:227 - Epoch 19 | Loss: 0.1896 | mIoU: 0.7266 | mHD95: 52.16
+2026-11-01 16:50:02,862 | INFO     | octseg.train:train_model:227 - Epoch 20 | Loss: 0.1888 | mIoU: 0.7235 | mHD95: 54.69
+2026-11-01 16:53:19,437 | INFO     | octseg.train:train_model:227 - Epoch 21 | Loss: 0.1849 | mIoU: 0.7193 | mHD95: 57.29
+2026-11-01 16:56:36,129 | INFO     | octseg.train:train_model:227 - Epoch 22 | Loss: 0.1850 | mIoU: 0.7295 | mHD95: 51.52
+2026-11-01 16:59:53,105 | INFO     | octseg.train:train_model:227 - Epoch 23 | Loss: 0.1834 | mIoU: 0.7306 | mHD95: 61.58
+2026-11-01 17:03:09,443 | INFO     | octseg.train:train_model:227 - Epoch 24 | Loss: 0.1789 | mIoU: 0.7466 | mHD95: 49.93
+2026-11-01 17:03:09,486 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7466)
+2026-11-01 17:06:26,266 | INFO     | octseg.train:train_model:227 - Epoch 25 | Loss: 0.1768 | mIoU: 0.7228 | mHD95: 61.02
+2026-11-01 17:09:42,957 | INFO     | octseg.train:train_model:227 - Epoch 26 | Loss: 0.1702 | mIoU: 0.7379 | mHD95: 52.95
+2026-11-01 17:12:59,289 | INFO     | octseg.train:train_model:227 - Epoch 27 | Loss: 0.1720 | mIoU: 0.7408 | mHD95: 50.95
+2026-11-01 17:16:15,792 | INFO     | octseg.train:train_model:227 - Epoch 28 | Loss: 0.1701 | mIoU: 0.7319 | mHD95: 50.29
+2026-11-01 17:19:32,762 | INFO     | octseg.train:train_model:227 - Epoch 29 | Loss: 0.1722 | mIoU: 0.7351 | mHD95: 50.35
+2026-11-01 17:22:49,282 | INFO     | octseg.train:train_model:227 - Epoch 30 | Loss: 0.1681 | mIoU: 0.7303 | mHD95: 49.01
+2026-11-01 17:26:05,620 | INFO     | octseg.train:train_model:227 - Epoch 31 | Loss: 0.1672 | mIoU: 0.7463 | mHD95: 51.37
+2026-11-01 17:29:22,773 | INFO     | octseg.train:train_model:227 - Epoch 32 | Loss: 0.1661 | mIoU: 0.7403 | mHD95: 51.70
+2026-11-01 17:32:39,214 | INFO     | octseg.train:train_model:227 - Epoch 33 | Loss: 0.1661 | mIoU: 0.7286 | mHD95: 55.94
+2026-11-01 17:35:55,697 | INFO     | octseg.train:train_model:227 - Epoch 34 | Loss: 0.1632 | mIoU: 0.7391 | mHD95: 49.28
+2026-11-01 17:39:12,512 | INFO     | octseg.train:train_model:227 - Epoch 35 | Loss: 0.1635 | mIoU: 0.7399 | mHD95: 48.20
+2026-11-01 17:42:28,921 | INFO     | octseg.train:train_model:227 - Epoch 36 | Loss: 0.1671 | mIoU: 0.7412 | mHD95: 49.57
+2026-11-01 17:45:45,352 | INFO     | octseg.train:train_model:227 - Epoch 37 | Loss: 0.1601 | mIoU: 0.7393 | mHD95: 51.52
+2026-11-01 17:49:02,200 | INFO     | octseg.train:train_model:227 - Epoch 38 | Loss: 0.1590 | mIoU: 0.7395 | mHD95: 52.26
+2026-11-01 17:52:18,915 | INFO     | octseg.train:train_model:227 - Epoch 39 | Loss: 0.1589 | mIoU: 0.7332 | mHD95: 57.90
+2026-11-01 17:55:35,546 | INFO     | octseg.train:train_model:227 - Epoch 40 | Loss: 0.1581 | mIoU: 0.7488 | mHD95: 49.84
+2026-11-01 17:55:35,579 | INFO     | octseg.train:train_model:231 - New best model saved! (mIoU: 0.7488)
+2026-11-01 17:58:52,469 | INFO     | octseg.train:train_model:227 - Epoch 41 | Loss: 0.1600 | mIoU: 0.7441 | mHD95: 50.86
+2026-11-01 18:02:08,885 | INFO     | octseg.train:train_model:227 - Epoch 42 | Loss: 0.1562 | mIoU: 0.7456 | mHD95: 47.58
+2026-11-01 18:05:25,342 | INFO     | octseg.train:train_model:227 - Epoch 43 | Loss: 0.1545 | mIoU: 0.7368 | mHD95: 51.64
+2026-11-01 18:08:42,184 | INFO     | octseg.train:train_model:227 - Epoch 44 | Loss: 0.1588 | mIoU: 0.7385 | mHD95: 54.98
+2026-11-01 18:11:58,857 | INFO     | octseg.train:train_model:227 - Epoch 45 | Loss: 0.1558 | mIoU: 0.7372 | mHD95: 54.24
+2026-11-01 18:15:15,276 | INFO     | octseg.train:train_model:227 - Epoch 46 | Loss: 0.1555 | mIoU: 0.7479 | mHD95: 50.59
+2026-11-01 18:18:31,917 | INFO     | octseg.train:train_model:227 - Epoch 47 | Loss: 0.1516 | mIoU: 0.7450 | mHD95: 48.76
+2026-11-01 18:21:48,913 | INFO     | octseg.train:train_model:227 - Epoch 48 | Loss: 0.1521 | mIoU: 0.7449 | mHD95: 50.53
+2026-11-01 18:25:05,556 | INFO     | octseg.train:train_model:227 - Epoch 49 | Loss: 0.1534 | mIoU: 0.7423 | mHD95: 50.62
+2026-11-01 18:28:21,999 | INFO     | octseg.train:train_model:227 - Epoch 50 | Loss: 0.1523 | mIoU: 0.7424 | mHD95: 49.82
+2026-11-01 18:31:39,082 | INFO     | octseg.train:train_model:227 - Epoch 51 | Loss: 0.1547 | mIoU: 0.7403 | mHD95: 49.59
+2026-11-01 18:34:55,766 | INFO     | octseg.train:train_model:227 - Epoch 52 | Loss: 0.1538 | mIoU: 0.7436 | mHD95: 49.00
+2026-11-01 18:38:12,224 | INFO     | octseg.train:train_model:227 - Epoch 53 | Loss: 0.1552 | mIoU: 0.7453 | mHD95: 48.84
+2026-11-01 18:41:29,091 | INFO     | octseg.train:train_model:227 - Epoch 54 | Loss: 0.1546 | mIoU: 0.7439 | mHD95: 48.98
+2026-11-01 18:44:45,519 | INFO     | octseg.train:train_model:227 - Epoch 55 | Loss: 0.1545 | mIoU: 0.7460 | mHD95: 49.67
+2026-11-01 18:48:02,014 | INFO     | octseg.train:train_model:227 - Epoch 56 | Loss: 0.1556 | mIoU: 0.7432 | mHD95: 49.83
+2026-11-01 18:51:18,775 | INFO     | octseg.train:train_model:227 - Epoch 57 | Loss: 0.1506 | mIoU: 0.7441 | mHD95: 49.76
+2026-11-01 18:54:35,256 | INFO     | octseg.train:train_model:227 - Epoch 58 | Loss: 0.1537 | mIoU: 0.7448 | mHD95: 49.08
+2026-11-01 18:57:51,668 | INFO     | octseg.train:train_model:227 - Epoch 59 | Loss: 0.1497 | mIoU: 0.7449 | mHD95: 49.32
+2026-11-01 19:01:08,342 | INFO     | octseg.train:train_model:227 - Epoch 60 | Loss: 0.1536 | mIoU: 0.7424 | mHD95: 49.72
+2026-11-01 19:01:08,486 | INFO     | octseg.train:train_model:235 - Peak training VRAM: 6436 MB
+2026-11-01 19:01:08,489 | INFO     | octseg.train_expert:train_expert:23 - Expert training finished. Best weights saved to /home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22/expert/best_model.pth
+2026-11-01 19:01:08,489 | INFO     | __main__:pipeline_hybrid:62 - Expert training complete. Checkpoint: /home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22/expert/best_model.pth
+2026-11-01 19:01:08,996 | INFO     | __main__:pipeline_hybrid:75 - --- STEP 2: HYBRID SWEEP (VAL) in /home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22/sweep ---
+2026-11-01 19:01:09,002 | INFO     | octseg.sweep_hybrid:sweep_hybrid:102 - --- STARTING HYBRID SWEEP (split=val) ---
+2026-11-01 19:01:12,861 | INFO     | octseg.sweep_hybrid:sweep_hybrid:110 - Sweeping across 14 configurations on 659 images (val split).
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:159 - ======================================================================
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:160 - SWEEP SUMMARY
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:161 - ======================================================================
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:162 - base                             | IRF Dice: 0.5823 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 3.9/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.3/0.25             | IRF Dice: 0.5836 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.3/0.35             | IRF Dice: 0.5951 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.4/0.25             | IRF Dice: 0.5870 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.4/0.35             | IRF Dice: 0.5992 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.5/0.25             | IRF Dice: 0.5912 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.5/0.35             | IRF Dice: 0.6052 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.6/0.25             | IRF Dice: 0.5970 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/linear/0.6/0.35             | IRF Dice: 0.6145 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/confidence/0.5/0.25         | IRF Dice: 0.5913 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/confidence/0.5/0.35         | IRF Dice: 0.5930 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/max/0.5/0.25                | IRF Dice: 0.5733 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - soft/max/0.5/0.35                | IRF Dice: 0.5834 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.4/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - hard                             | IRF Dice: 0.5733 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:164 - replace                          | IRF Dice: 0.6439 | SRF Dice: 0.8143 | PED Dice: 0.8790 | IRF regions pred/gt: 4.5/6.7
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:165 - ======================================================================
+2026-11-01 19:11:00,689 | INFO     | octseg.sweep_hybrid:sweep_hybrid:183 - Recommended test evaluation command:
+python -m octseg.evaluate_hybrid --base-weights outputs/runs/2026-10-27_14-57-10_test20/best_model.pth --expert-weights /home/bgieta/oct-project/outputs/runs/2026-11-01_15-44-27_test22/expert/best_model.pth --ensemble-mode replace
+2026-11-01 19:11:00,866 | INFO     | __main__:pipeline_hybrid:89 - --- STEP 3: HYBRID TEST EVALUATION ---
+2026-11-01 19:11:00,866 | INFO     | __main__:pipeline_hybrid:93 - Evaluating winning sweep configuration on test set: {'ensemble_mode': 'replace'}
+2026-11-01 19:11:00,866 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:32 - --- STARTING HYBRID EVALUATION ---
+2026-11-01 19:11:04,930 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:39 - Ensemble Mode: replace | Expert Weight: 0.4 | Blend Strategy: linear | IRF Threshold: 0.25 | IRF Min Region Size: 12 | IRF Override: False
+2026-11-01 19:11:05,022 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:47 - Testing on 674 images from 7 patients.
+2026-11-01 19:11:05,787 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:50 - Dynamic vis indices: {1: 331, 2: 283, 3: 556}
+2026-11-01 19:16:15,337 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:65 - Generating predictions.png...
+2026-11-01 19:16:17,274 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:71 - ==============================
+2026-11-01 19:16:17,274 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:72 - FINAL HYBRID METRICS
+2026-11-01 19:16:17,274 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:73 - ==============================
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:74 - mIoU: 0.7233 | mDice: 0.8306
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:75 - mHD95: 73.8247 | mASD: 24.2443
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:77 - Class 1 (IRF) | IoU: 0.5786 | Dice: 0.7331 | HD95: 52.60 | ASD: 8.59
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:78 -   Regions GT/Pred: 8.9/5.7 | BP: 11.6668 | Avg Area: 10266.6 px
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:77 - Class 2 (SRF) | IoU: 0.7216 | Dice: 0.8383 | HD95: 93.25 | ASD: 36.83
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:78 -   Regions GT/Pred: 1.3/1.6 | BP: 13.5057 | Avg Area: 16132.9 px
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:77 - Class 3 (PED) | IoU: 0.6174 | Dice: 0.7634 | HD95: 75.63 | ASD: 27.31
+2026-11-01 19:16:17,275 | INFO     | octseg.evaluate_hybrid:evaluate_hybrid:78 -   Regions GT/Pred: 1.3/1.5 | BP: 6.1818 | Avg Area: 23202.6 px
+2026-11-01 19:16:17,276 | INFO     | __main__:pipeline_hybrid:115 - --- STEP 4: SNAPSHOTTING CONFIGS AND SWEEP ---
+2026-11-01 19:16:17,281 | INFO     | __main__:pipeline_hybrid:124 - --- STEP 5: ARCHIVING SOURCES ---
+2026-11-01 19:16:17,281 | INFO     | octseg.runs:archive_experiment_sources:88 - --- SOURCE ARCHIVING ---
+2026-11-01 19:16:17,301 | INFO     | octseg.runs:archive_experiment_sources:100 - Source code and configurations archiving complete.
+2026-11-01 19:16:17,302 | INFO     | octseg.runs:promote_run_to_experiment:125 - Promoting run 2026-11-01_15-44-27_test22 to experiments/test22...
