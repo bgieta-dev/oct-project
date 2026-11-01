@@ -13,7 +13,7 @@ OCT retinal fluid segmentation (IRF / SRF / PED) on the RETOUCH dataset: SegForm
 - `docs/` METHODS, EXPERIMENTS, ROADMAP, `archive/`, `thesis/` (LaTeX).
 - `experiments/` frozen history — do not edit. Tracked: `test19`, `legacy_root/`; `test2`..`test18` were removed from the working tree in commit `0851b69` and live in commit `4657305`. Index of all runs: `docs/EXPERIMENTS.md`.
 - Gitignored: `outputs/` (runs, checkpoints), `data_folder/` (dataset), `analysis/` (unrelated code from another project).
-- `.omp/agents/` specialist subagent templates for omp (tech-lead-architect, ml-training-engineer, segmentation-eval-specialist, interpretability-and-viz-specialist, thesis-and-docs-specialist, qa-test-engineer, codebase-cleaner).
+- `.omp/agents/` domain-specific ML and thesis specialists (generic roles route to global OMP / ECC archetypes).
 
 ## Setup / run
 All commands from repo root.
@@ -50,3 +50,34 @@ Data: `data_folder/cropped_images/` + `data_folder/cropped_masks/`, names `{devi
 - Verification: Deterministic playbook at `.omp/skills/verify/SKILL.md` (`skill://verify`).
 - Invariants: Never commit `*.pth`/`*.pt` checkpoints; never commit `.env` with real credentials; unit tests run CPU-only on synthetic data; external calls require explicit timeouts.
 - Rules reference: `.omp/rules/engineering-guardrails.md`.
+
+## Agent Roles & Delegation
+### OMP Orchestrator Invariant & Delegation (MANDATORY)
+1. **Primary Agent Is Orchestrator ONLY**: Primary agent MUST NEVER perform direct code implementations, multi-line edits, or heavy manual execution tasks directly in parent context. Its sole job is to plan, decompose, spawn specialist subagents via `task`, review diffs, coordinate execution, and run smoke verification.
+2. **Subagent Effort Levels**: Default `medium` (`effort: "med"` / model `:medium`); simple mechanical tasks `low` (`effort: "lo"` / model `:low`); complex algorithms/proofs/audits `high` (`effort: "hi"` / model `:high`).
+3. **Zero Unilateral Decisions & Mandatory Pre-Ask Research**:
+   - Never perform out-of-scope actions, irreversible mutations, or major architectural decisions without explicit user approval via `ask`.
+   - Before asking the user via `ask`, MUST search the internet/docs (`web_search`, `agent-reach`, `context7`) to benchmark industry best practices and present evidence-backed tradeoffs.
+4. **Search Before Creation**:
+   - Always search existing in-system and global agents in `~/.omp/agent/agents/` first.
+   - Creating disposable or single-use agent templates in `.omp/agents/` is strictly FORBIDDEN.
+
+Standard engineering roles route to **Global OMP / ECC Archetypes**:
+- **QA & Testing**: `tdd-guide`, standard `pytest` suite.
+- **Code Health & Dead Code**: `skill://remove-deadcode`, `skill://refactor`, `refactor-cleaner`.
+- **Security**: `security-reviewer`.
+- **Documentation**: `docs-curator`.
+- **Surgical Edits (1-2 files)**: `cavecrew-builder`.
+- **Symbols & Code Location**: `cavecrew-investigator`.
+- **PyTorch & ML Diagnostics**: `pytorch-build-resolver`, `mle-reviewer`.
+
+### Local Project Agents (.omp/agents/)
+Domain-specific ML, thesis, and computer vision specialists:
+- `ml-training-engineer`: PyTorch model training and optimization pipelines.
+- `segmentation-eval-specialist`: RETOUCH dataset fluid segmentation metrics (IRF/SRF/PED Dice, IoU).
+- `interpretability-and-viz-specialist`: Attention maps and visual interpretability for transformer backbones.
+- `thesis-and-docs-specialist`: Academic thesis LaTeX drafting and experimental report sync.
+- `ml-strategy-architect`: ML experimentation strategy and architecture decisions.
+- `ml-research-scout`: Literature review and model benchmark scouting.
+
+Generic duplicate roles (`qa-test-engineer`, `codebase-cleaner`, `tech-lead-architect`) have been retired to `.archive/`.

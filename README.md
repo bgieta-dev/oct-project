@@ -41,16 +41,21 @@ octseg/            importable package (run modules with `python -m octseg.<modul
   benchmark.py       inference latency / peak VRAM
   attention_visualizer.py                                viz.py, runs.py   figures, run dirs, experiment promotion
   pipeline.py        train -> eval -> attention -> snapshot [-> experiments/testN]
+  pipeline_hybrid.py turnkey: train expert -> val sweep -> test eval [-> experiments/testN]
   run_series.py      several configs as consecutive testN experiments
   train_expert.py    binary IRF expert
 configs/           base.yaml, sam_adamw.yaml, test21.yaml, irf_expert.yaml, hybrid.yaml, swin_unetr_3d.yaml,
                    retfound_lora.yaml, retfound_lora_nodetail.yaml, retfound_frozen.yaml
 splits/            train/val/test patient lists (frozen, seed 42)
 tests/             pytest (synthetic data, CPU, seconds)
-scripts/           run.sh / run.bat (pipeline + auto-promotion), run_retfound_ablation.sh / .bat,
-                   run_p100.sh, git_update.sh / .bat, recover_gpu.ps1 / .bat (wrappers of the root scripts)
+scripts/           run.sh / run.bat (pipeline + auto-promotion), run_hybrid_p100.sh / .bat,
+                   run_remote_hybrid.sh / .bat, run_retfound_ablation.sh / .bat,
+                   run_p100.sh, run_remote_p100.sh / .bat, git_update.sh / .bat,
+                   recover_gpu.ps1 / .bat (wrappers of the root scripts)
 run.sh / run.bat   root local launcher (runs configs/test21.yaml by default, auto-promotes, calls git_update)
+run_hybrid_p100.sh / .bat  dedicated P100 hybrid runner (frees container VRAM, auto-promotes, syncs to git)
 run_remote_p100.sh / .bat  remote P100 launcher (SSH connects to 192.168.1.131, pulls git, launches/attaches tmux)
+run_remote_hybrid.sh / .bat remote hybrid launcher (SSH connects to 192.168.1.131, runs oct_hybrid tmux session)
 git_update.sh/.bat git add + commit + pull --rebase + push
 recover_gpu.ps1/.bat  Windows: recover an NVIDIA GPU reported as "GPU is lost" without a reboot (admin)
 docs/              METHODS.md, EXPERIMENTS.md, ROADMAP.md, archive/, thesis/ (LaTeX sources)
@@ -94,11 +99,14 @@ python -m octseg.evaluate --model outputs/runs/<run>/best_model.pth [--output DI
 python -m octseg.evaluate --config configs/irf_expert.yaml --model <expert>.pth      # expert alone
 python -m octseg.evaluate_hybrid --base-weights <base>.pth --expert-weights <expert>.pth [--ensemble-mode soft|hard|replace ...]
 python -m octseg.sweep_hybrid --base-weights <base>.pth --expert-weights <expert>.pth [--split val]   # pick the merge variant on val
+python -m octseg.pipeline_hybrid --base-weights <base>.pth [--expert-weights <expert>.pth] [--promote] # turnkey expert train + sweep + eval
 python -m octseg.benchmark --config configs/base.yaml --model <base>.pth [--device cpu|cuda]          # latency + peak VRAM
 python -m octseg.pipeline --config configs/swin_unetr_3d.yaml --name swin3d                            # native 3D SwinUNETR
 python -m octseg.attention_visualizer --model <base>.pth
 python -m octseg.pipeline --promote [--config ...]                                   # + copy to experiments/testN (next free N)
 scripts/run.sh [--config ...]           # pipeline --promote, activates venv (scripts\run.bat on Windows)
+./run_remote_hybrid.sh [<base>.pth]     # remote turnkey hybrid pipeline on P100 via SSH / tmux (.bat on Windows)
+./run_hybrid_p100.sh [<base>.pth]       # run hybrid on P100 locally with VRAM freeing and git auto-sync
 scripts/run_retfound_ablation.sh [--push]   # RETFound LoRA / no-detail / frozen, one after another (testN..N+2; .bat on Windows)
 python -m octseg.run_series --configs a.yaml b.yaml [--epochs N] [--push]   # any configs sequentially, summary table at the end
 pytest                                  # unit tests
