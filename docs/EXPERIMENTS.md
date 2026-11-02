@@ -33,6 +33,8 @@ Final numbers come from the `experiment.log` of each run (the first log line kee
 | test18 | run_2026-06-08_10-31-03 | mit-b2 | 0.6990 / 0.8118 |
 | test19 | run_2026-06-18_22-22-31 | mit-b2 | 0.7029 / 0.8150 (base only; expert/hybrid not run) |
 | test20 | run_2026-10-27_14-57-04 | mit-b2 (SAM-AdamW) | 0.7035 / 0.8142 |
+| test21 | run_2026-10-29_21-17-23 | mit-b2 (Stabilized ASAM, decoupled post-proc) | 0.7005 / 0.8127 |
+| test22 | run_2026-11-01_15-44-27 | Hybrid (Base test20 mit-b2 + IRF Expert mit-b0, replace) | 0.7233 / 0.8306 |
 
 No SegFormer checkpoint (`*.pth`) exists in this repository (they are gitignored). test11-gold, test18 and test19
 can only be re-evaluated on the lab machine that holds them.
@@ -118,16 +120,65 @@ Artifacts committed in `experiments/test20/`: `metrics.yaml`, `metrics.png`, `pr
 `failures/` (top 5 worst slices), `attention_maps/` (MiT-B2 blocks 0..15 attention rollout overlays), `src/` snapshot.
 
 
-## Planned: RETFound-OCT + LoRA ablation (test21–test23, no results yet)
+## test21 — SegFormer-B2 + Stabilized ASAM & Decoupled Post-Processing (2026-10-29, Tesla P100)
+
+Source: `experiments/test21/` (run `run_2026-10-29_21-17-23` promoted via `octseg.pipeline --promote` on Tesla P100 16GB,
+Ubuntu 24.04, PyTorch 2.6.0+cu124).
+
+Snapshot `config.yaml`: `nvidia/mit-b2`, 2.5D, LR 5e-5, 80 epochs, 15 warm-up epochs, dropout 0.2, Focal ($\gamma = 2.0$,
+static weights `[0.2, 5.0, 2.0, 2.0]`) + Tversky ($\alpha = 0.2, \beta = 0.8$), `USE_SAM: true`, `SAM_ADAPTIVE: true`,
+`SAM_RHO: 0.5`, `SAM_ETA: 0.01`, `BATCH_SIZE: 10`, `ACCUMULATION_STEPS: 3` (effective batch 30, peak VRAM 11.76 GB),
+TTA scales 0.8 / 1.0 / 1.2, decoupled post-processing (`CLASS_MIN_REGION_SIZES: {1: 20, 2: 80, 3: 80}`, `IRF_OPEN: false`,
+thresholds: IRF 0.25, SRF 0.80, PED 0.80).
+
+**Test results (evaluation on test set, 674 slices across Cirrus, Spectralis, Topcon):**
+* Overall: **mIoU 0.7005**, **mDice 0.8127**, **mHD95 71.67 mm**, **mASD 25.33 mm** | Parameters: 27.35 M
+* Class 0 (Background): IoU 0.9737, Dice 0.9867
+* Class 1 (IRF): IoU **0.5451**, Dice **0.7056** (HD95: **47.34 mm**, ASD: **10.26 mm**, regions GT/pred: 8.9 / 5.3) — *beats test20 (0.5035 / 0.6698, HD95 51.87 mm)*
+* Class 2 (SRF): IoU 0.7150, Dice 0.8338 (HD95: 90.99 mm, ASD: 40.66 mm, regions GT/pred: 1.3 / 1.5)
+* Class 3 (PED): IoU 0.5681, Dice 0.7246 (HD95: 76.68 mm, ASD: 25.07 mm, regions GT/pred: 1.3 / 1.7)
+
+**Key Takeaways & Analysis:**
+- **IRF Recovery:** Scale-invariant ASAM perturbation ($T_w = |w| + \eta$, $\rho = 0.5, \eta = 0.01$) prevented over-smoothing of delicate micro-cyst representations. Combined with decoupled area filtering (20 px min region) and disabling destructive morphological opening (`IRF_OPEN: false`), IRF IoU jumped from 0.5035 to **0.5451** (+4.16%) and IRF Dice jumped from 0.6698 to **0.7056** (+3.58%).
+- **Boundary Metric Record:** Achieved lowest **mHD95 (71.67 mm)** and IRF HD95 (**47.34 mm**) across all modern benchmark runs, with IRF predicted regions rising to 5.3 per slice (approaching ground truth 8.9).
+- **Trade-off:** High clinical weighting for IRF (weight 5.0 vs 2.0 for SRF/PED, threshold 0.25 vs 0.80) slightly conservative on PED Dice (0.7246 vs 0.7634 in test20).
+
+Artifacts committed in `experiments/test21/`: `metrics.yaml`, `metrics.png`, `predictions.png`, `failures/` (top 5 worst slices), `attention_maps/` (SRF, IRF, PED rollout overlays), `src/` snapshot.
+
+## test22 — Turnkey Hybrid Ensemble: Base test20 + IRF Expert (2026-11-01, Tesla P100)
+
+Source: `experiments/test22/` (run `run_2026-11-01_15-44-27` generated and promoted by `octseg.pipeline_hybrid --base-weights outputs/runs/2026-10-27_14-57-10_test20/best_model.pth --promote` on Tesla P100 16GB, Ubuntu 24.04, PyTorch 2.6.0+cu124).
+
+Pipeline & Architecture:
+* **Base Model:** Frozen test20 SegFormer-B2 (SAM-AdamW, 80 epochs).
+* **IRF Specialist Expert:** Dedicated binary `nvidia/mit-b0` SegFormer (2.5D, LR 5e-5, 60 epochs, batch 16 x accum 2, class weights `[1.0, 8.0]`, Focal $\gamma = 2.0$ + Tversky $\alpha = 0.3, \beta = 0.7$, IRF threshold 0.25).
+* **Validation Sweep (`sweep.yaml`):** Automated 14-variant sweep across blending modes (linear weights 0.3..0.6, confidence-based, max, hard, replace) on validation split. `select_best` selected mode **`replace`** (val mIoU 0.7329, mDice 0.8325, val IRF Dice 0.6439 vs base 0.5823: +6.16% improvement with zero degradation to SRF/PED).
+* **Test Policy (`replace`):** Retains base test20 predictions for SRF and PED unchanged; discards base IRF; writes expert IRF (threshold 0.25, min region 12 px) over background only.
+
+**Test results (evaluation on test set, 674 slices across Cirrus, Spectralis, Topcon):**
+* Overall: **mIoU 0.7233**, **mDice 0.8306**, **mHD95 73.82 mm**, **mASD 24.24 mm**
+* Class 0 (Background): IoU 0.9756, Dice 0.9877
+* Class 1 (IRF): IoU **0.5786**, Dice **0.7331** (HD95: 52.60 mm, ASD: **8.59 mm**, regions GT/pred: 8.9 / 5.7) — *+6.33% Dice over test20, +2.75% over test21*
+* Class 2 (SRF): IoU **0.7216**, Dice **0.8383** (HD95: 93.25 mm, ASD: 36.83 mm, regions GT/pred: 1.3 / 1.6) — *100% preserved peak from test20*
+* Class 3 (PED): IoU **0.6174**, Dice **0.7634** (HD95: 75.63 mm, ASD: 27.31 mm, regions GT/pred: 1.3 / 1.5) — *100% preserved peak from test20*
+
+**Key Takeaways & Significance:**
+- **Best-of-Both-Worlds Performance:** Solves the multi-class trade-off by decoupling macro-lesion detection (SRF Dice 0.8383, PED Dice 0.7634 preserved exactly from test20) from micro-cystic IRF detection.
+- **Massive IRF Breakthrough:** IRF Dice jumped from 0.6698 (test20) to **0.7331** (+6.33% absolute) and IRF IoU rose to **0.5786** (+7.51% absolute). IRF predicted regions rose to 5.7 per slice (closest to 8.9 GT of all runs).
+- **New Project Milestone:** Overall mIoU reached **0.7233** and mDice reached **0.8306**, establishing the highest overall multi-class metric scores across all reproducible modern pipeline runs.
+
+Artifacts committed in `experiments/test22/`: `metrics.yaml`, `sweep.yaml`, `predictions.png`, `expert/` snapshot (`best_model.pth` excluded), `expert_config.yaml`, `src/` snapshot.
+
+## Planned: RETFound-OCT + LoRA ablation (test23–test25, no results yet)
 
 Pure-transformer `ARCH: retfound` model (see `docs/METHODS.md` §7), compared against test19 under the identical
 pipeline (splits, losses, thresholds, TTA, post-processing, metrics). Run all three with
 `scripts/run_retfound_ablation.sh` (`.bat` on Windows) — they get the next three free `testN` numbers
-(test21, test22, test23 if no other run is promoted first):
+(test23, test24, test25 if no other run is promoted first):
 
-* planned test21 — `configs/retfound_lora.yaml`: RETFound-OCT ViT-L/16, LoRA r = 16, MiT-B0 detail branch;
-* planned test22 — `configs/retfound_lora_nodetail.yaml`: LoRA r = 16, no detail branch (ablation of the branch);
-* planned test23 — `configs/retfound_frozen.yaml`: frozen encoder (`RETFOUND_LORA_RANK: 0`), detail branch on
+* planned test23 — `configs/retfound_lora.yaml`: RETFound-OCT ViT-L/16, LoRA r = 16, MiT-B0 detail branch;
+* planned test24 — `configs/retfound_lora_nodetail.yaml`: LoRA r = 16, no detail branch (ablation of the branch);
+* planned test25 — `configs/retfound_frozen.yaml`: frozen encoder (`RETFOUND_LORA_RANK: 0`), detail branch on
   (ablation of LoRA).
 
 Baseline: test19 mIoU 0.7029, IRF Dice 0.6958. Prerequisite: access to the gated Hugging Face repo
