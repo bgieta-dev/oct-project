@@ -37,6 +37,7 @@ octseg/            importable package (run modules with `python -m octseg.<modul
   optim.py           SAM optimizer + AdamW builder       model.py         SegFormer / RETFound+LoRA / SwinUNETR
   hybrid_inference.py  base + IRF expert ensemble        evaluate_hybrid.py
   sweep_hybrid.py    hybrid merge-variant selection on val
+  calibrate_postprocess.py post-processing grid calibration (SRF/PED/sharpening/3D filter)
   volume_data.py     3D volumes + MONAI transforms       train3d.py, evaluate3d.py   SwinUNETR 3D
   benchmark.py       inference latency / peak VRAM
   attention_visualizer.py                                viz.py, runs.py   figures, run dirs, experiment promotion
@@ -49,13 +50,16 @@ configs/           base.yaml, sam_adamw.yaml, test21.yaml, irf_expert.yaml, hybr
 splits/            train/val/test patient lists (frozen, seed 42)
 tests/             pytest (synthetic data, CPU, seconds)
 scripts/           run.sh / run.bat (pipeline + auto-promotion), run_hybrid_p100.sh / .bat,
-                   run_remote_hybrid.sh / .bat, run_retfound_ablation.sh / .bat,
+                   run_remote_hybrid.sh / .bat, run_calibrate_p100.sh / .bat,
+                   run_remote_calibrate.sh / .bat, run_retfound_ablation.sh / .bat,
                    run_p100.sh, run_remote_p100.sh / .bat, git_update.sh / .bat,
                    recover_gpu.ps1 / .bat (wrappers of the root scripts)
 run.sh / run.bat   root local launcher (runs configs/test21.yaml by default, auto-promotes, calls git_update)
 run_hybrid_p100.sh / .bat  dedicated P100 hybrid runner (frees container VRAM, auto-promotes, syncs to git)
+run_calibrate_p100.sh / .bat P100 post-processing calibration runner (frees container VRAM, runs sweep)
 run_remote_p100.sh / .bat  remote P100 launcher (SSH connects to 192.168.1.131, pulls git, launches/attaches tmux)
 run_remote_hybrid.sh / .bat remote hybrid launcher (SSH connects to 192.168.1.131, runs oct_hybrid tmux session)
+run_remote_calibrate.sh / .bat remote calibration launcher (SSH connects to 192.168.1.131, runs oct_calibrate tmux session)
 git_update.sh/.bat git add + commit + pull --rebase + push
 recover_gpu.ps1/.bat  Windows: recover an NVIDIA GPU reported as "GPU is lost" without a reboot (admin)
 docs/              METHODS.md, EXPERIMENTS.md, ROADMAP.md, archive/, thesis/ (LaTeX sources)
@@ -100,6 +104,7 @@ python -m octseg.evaluate --config configs/irf_expert.yaml --model <expert>.pth 
 python -m octseg.evaluate_hybrid --base-weights <base>.pth --expert-weights <expert>.pth [--ensemble-mode soft|hard|replace ...]
 python -m octseg.sweep_hybrid --base-weights <base>.pth --expert-weights <expert>.pth [--split val]   # pick the merge variant on val
 python -m octseg.pipeline_hybrid --base-weights <base>.pth [--expert-weights <expert>.pth] [--promote] # turnkey expert train + sweep + eval
+python -m octseg.calibrate_postprocess --base-weights <base>.pth [--expert-weights <expert>.pth]       # zero-compute postprocess grid sweep
 python -m octseg.benchmark --config configs/base.yaml --model <base>.pth [--device cpu|cuda]          # latency + peak VRAM
 python -m octseg.pipeline --config configs/swin_unetr_3d.yaml --name swin3d                            # native 3D SwinUNETR
 python -m octseg.attention_visualizer --model <base>.pth
@@ -107,6 +112,8 @@ python -m octseg.pipeline --promote [--config ...]                              
 scripts/run.sh [--config ...]           # pipeline --promote, activates venv (scripts\run.bat on Windows)
 ./run_remote_hybrid.sh [<base>.pth]     # remote turnkey hybrid pipeline on P100 via SSH / tmux (.bat on Windows)
 ./run_hybrid_p100.sh [<base>.pth]       # run hybrid on P100 locally with VRAM freeing and git auto-sync
+./run_remote_calibrate.sh [<base>.pth]  # remote post-processing calibration on P100 via SSH / tmux (.bat on Windows)
+./run_calibrate_p100.sh [<base>.pth]    # run calibration on P100 locally with VRAM freeing
 scripts/run_retfound_ablation.sh [--push]   # RETFound LoRA / no-detail / frozen, one after another (testN..N+2; .bat on Windows)
 python -m octseg.run_series --configs a.yaml b.yaml [--epochs N] [--push]   # any configs sequentially, summary table at the end
 pytest                                  # unit tests
