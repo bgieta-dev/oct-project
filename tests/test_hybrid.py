@@ -265,3 +265,27 @@ def test_select_best_filtering():
     }
     best = select_best([row_qualifying_1, row_qualifying_2, row_qualifying_tie], base_row, tolerance=0.01)
     assert best == row_qualifying_2  # first of the 0.54 ties
+
+
+def test_calibrated_hybrid_config():
+    from octseg.config import CONFIG_DIR, load_config
+
+    cfg = load_config(CONFIG_DIR / "calibrated_hybrid.yaml")
+    assert cfg.PED_SHARPEN_FACTOR == 0.0
+    assert cfg.USE_VOLUMETRIC_FILTER is True
+    assert cfg.VOLUMETRIC_MIN_SLICES == 2
+    assert cfg.HYBRID_ENSEMBLE_MODE == "soft"
+
+
+def test_volumetric_filter_integration():
+    from octseg.postprocess import volumetric_consistency_filter
+
+    vol = np.zeros((3, 10, 10), dtype=np.uint8)
+    vol[0, 2:5, 2:5] = 1  # 1-slice component
+    vol[1, 6:9, 6:9] = 2  # 2-slice component start
+    vol[2, 6:9, 6:9] = 2  # 2-slice component end
+
+    filtered = volumetric_consistency_filter(vol, min_slices=2)
+    assert (filtered[0, 2:5, 2:5] == 0).all()
+    assert (filtered[1, 6:9, 6:9] == 2).all()
+    assert (filtered[2, 6:9, 6:9] == 2).all()

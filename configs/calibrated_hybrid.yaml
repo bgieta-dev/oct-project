@@ -1,0 +1,5 @@
+# Calibrated hybrid ensemble configuration with volumetric filtering and unsharpened PED.
+base: hybrid.yaml
+PED_SHARPEN_FACTOR: 0.0
+USE_VOLUMETRIC_FILTER: true
+VOLUMETRIC_MIN_SLICES: 2

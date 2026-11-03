@@ -86,6 +86,8 @@ class Config:
     CLASS_THRESHOLDS: Dict[int, float] = field(default_factory=lambda: {1: 0.30, 2: 0.80, 3: 0.80})
     ATTENTION_CONTRAST: float = 0.6
     PED_SHARPEN_FACTOR: float = 1.0
+    USE_VOLUMETRIC_FILTER: bool = False
+    VOLUMETRIC_MIN_SLICES: int = 2
     SAVE_FAILURES: bool = True
     TOP_K_FAILURES: int = 5
     CENTRAL_SLICE_IDX: int = 1  # centre channel of the 2.5D stack
